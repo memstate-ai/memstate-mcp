@@ -1,4 +1,4 @@
-# Memstate MCP
+# Memstate AI - MCP
 
 [![npm version](https://img.shields.io/npm/v/@memstate/mcp?color=brightgreen)](https://www.npmjs.com/package/@memstate/mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -13,7 +13,7 @@
 
 ## Why Memstate?
 
-| | Mem0 | Memstate |
+| | RAG (most other memory systems) | Memstate AI |
 |---|---|---|
 | Token usage per conversation | ~7,500 | ~1,500 |
 | Agent visibility | Black box | Full transparency |
@@ -168,13 +168,5 @@ MEMSTATE_API_KEY=your_key npx @memstate/mcp --test
 ```
 
 Prints all available tools and confirms your API key works.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
----
 
 *Built for AI agents that deserve to know what they know.*
