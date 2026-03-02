@@ -1,0 +1,60 @@
+{
+  "name": "@memstate/mcp",
+  "version": "1.0.1",
+  "description": "Versioned memory for AI agents — structured keypaths, conflict detection, and 80% fewer tokens than alternatives.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "memstate-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "node dist/index.js --test",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "ai",
+    "memory",
+    "agents",
+    "claude",
+    "cursor",
+    "llm",
+    "model-context-protocol",
+    "versioning",
+    "rag",
+    "mcp-server",
+    "mcp-client",
+    "openai",
+    "codex",
+    "cursor"
+  ],
+  "author": "Memstate AI <hello@memstate.ai> (https://memstate.ai)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/memstate-ai/memstate-mcp.git"
+  },
+  "homepage": "https://memstate.ai",
+  "bugs": {
+    "url": "https://github.com/memstate-ai/memstate-mcp/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "typescript": "^5.0.0"
+  }
+}
