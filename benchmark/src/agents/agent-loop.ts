@@ -5,6 +5,7 @@ import {
   AgentToolCall,
   TokenUsage,
   MemoryAdapter,
+  NativeToolDefinition,
   LLMProviderConfig,
 } from "../types";
 import { createLLMProvider, LLMProvider } from "./llm-provider";
@@ -19,9 +20,15 @@ import { createLLMProvider, LLMProvider } from "./llm-provider";
  * raw LLM APIs, the only variables are:
  *   1. The system prompt (identical across runs)
  *   2. The user prompt (defined by the scenario)
- *   3. The memory tools (provided by the MCP adapter)
+ *   3. The memory tools (discovered from the MCP server — native names!)
  *
  * This ensures the benchmark measures the MEMORY SYSTEM, not the framework.
+ *
+ * NATIVE TOOL PASSTHROUGH:
+ * When the adapter supports getNativeTools(), the agent sees the real MCP tool
+ * names (e.g., memstate_set, memstate_get) exactly as a customer would. Tool
+ * calls are passed through to the MCP server via callNativeTool(). This means
+ * the AGENTS.md instructions (which reference real tool names) work naturally.
  *
  * MULTI-PROVIDER SUPPORT:
  * The agent loop supports any LLM via the LLMProvider abstraction:
@@ -59,69 +66,94 @@ export interface ToolDefinition {
   };
 }
 
-/** Build the tool definitions that the agent can use */
-function buildToolDefinitions(): ToolDefinition[] {
+/**
+ * Convert native MCP tool definitions to the provider-agnostic format.
+ * Strips out the project_id parameter since it's auto-injected by the adapter.
+ */
+function nativeToolsToDefinitions(
+  nativeTools: NativeToolDefinition[],
+  projectParam: string
+): ToolDefinition[] {
+  return nativeTools.map((t) => {
+    const schema = t.inputSchema as {
+      type?: string;
+      properties?: Record<string, { type?: string; description?: string }>;
+      required?: string[];
+    };
+    const properties: Record<string, { type: string; description: string }> = {};
+    const required: string[] = [];
+
+    if (schema.properties) {
+      for (const [name, prop] of Object.entries(schema.properties)) {
+        // Skip the project param — it's auto-injected
+        if (name === projectParam) continue;
+        properties[name] = {
+          type: (prop as { type?: string }).type || "string",
+          description: (prop as { description?: string }).description || "",
+        };
+      }
+    }
+    if (schema.required) {
+      for (const r of schema.required) {
+        if (r !== projectParam && properties[r]) {
+          required.push(r);
+        }
+      }
+    }
+
+    return {
+      name: t.name,
+      description: t.description,
+      parameters: { type: "object" as const, properties, required },
+    };
+  });
+}
+
+/** Fallback generic tool definitions (used when adapter doesn't support native tools) */
+function buildGenericToolDefinitions(): ToolDefinition[] {
   return [
     {
       name: "memory_store",
       description:
-        "Store a fact in the project's memory. Use dot-separated keypaths like 'database.schema.users'. The project name is added automatically — do NOT include it in the keypath.",
+        "Store a fact in the project's memory. Use dot-separated keypaths like 'database.schema.users'. The project name is added automatically.",
       parameters: {
         type: "object",
         properties: {
-          key: {
-            type: "string",
-            description: "Dot-separated keypath (e.g., 'frontend.framework', 'database.schema.users'). Do NOT include the project name.",
-          },
-          value: {
-            type: "string",
-            description: "The value to store",
-          },
+          key: { type: "string", description: "Dot-separated keypath" },
+          value: { type: "string", description: "The value to store" },
         },
         required: ["key", "value"],
       },
     },
     {
       name: "memory_get",
-      description:
-        "Retrieve a fact or browse memory. Use a dot-separated keypath to get a specific fact, or omit the key to browse everything. The project name is added automatically.",
+      description: "Retrieve a fact or browse memory. Leave key empty to browse everything.",
       parameters: {
         type: "object",
         properties: {
-          key: {
-            type: "string",
-            description: "Dot-separated keypath to retrieve (e.g., 'database.schema' to browse all schema facts). Leave empty to browse entire project.",
-          },
+          key: { type: "string", description: "Dot-separated keypath to retrieve" },
         },
         required: ["key"],
       },
     },
     {
       name: "memory_search",
-      description:
-        "Search memory by meaning. Use natural language to find relevant facts across the project.",
+      description: "Search memory by meaning using natural language.",
       parameters: {
         type: "object",
         properties: {
-          query: {
-            type: "string",
-            description: "Natural language search query",
-          },
+          query: { type: "string", description: "Natural language search query" },
         },
         required: ["query"],
       },
     },
     {
       name: "memory_history",
-      description:
-        "View the version history of a specific keypath to see how a decision changed over time.",
+      description: "View the version history of a specific keypath.",
       parameters: {
         type: "object",
         properties: {
-          key: {
-            type: "string",
-            description: "Dot-separated keypath to get history for (e.g., 'database.type')",
-          },
+          key: { type: "string", description: "Dot-separated keypath to get history for" },
         },
         required: ["key"],
       },
@@ -135,7 +167,25 @@ export async function runAgentLoop(
 ): Promise<AgentLoopResult> {
   const { config, adapter, systemPrompt, projectName, verbose } = options;
   const provider = createLLMProvider(config.provider);
-  const tools = buildToolDefinitions();
+
+  // Determine whether to use native MCP tools or generic wrappers
+  const useNativeTools = !!(adapter.getNativeTools && adapter.callNativeTool);
+  const nativeTools = useNativeTools ? adapter.getNativeTools!() : [];
+  const tools = useNativeTools
+    ? nativeToolsToDefinitions(nativeTools, "project_id")
+    : buildGenericToolDefinitions();
+
+  // Track which tool names are native (for routing)
+  const nativeToolNames = new Set(nativeTools.map((t) => t.name));
+
+  if (verbose) {
+    if (useNativeTools) {
+      console.log(`  [Agent] Using native MCP tools: ${nativeTools.map(t => t.name).join(", ")}`);
+    } else {
+      console.log(`  [Agent] Using generic tool wrappers (adapter doesn't support native passthrough)`);
+    }
+  }
+
   const turns: AgentTurn[] = [];
   const memoryToolCalls: AgentToolCall[] = [];
   const errors: string[] = [];
@@ -210,31 +260,43 @@ export async function runAgentLoop(
 
       // Execute each tool call and add results
       for (const toolCall of response.toolCalls) {
-        const input = toolCall.arguments as Record<string, string>;
+        const input = toolCall.arguments as Record<string, unknown>;
         const toolStart = Date.now();
         let output: string;
 
         try {
-          let result;
-          switch (toolCall.name) {
-            case "memory_store":
-              result = await adapter.storeFact(projectName, input.key, input.value);
-              output = result.rawResponse || JSON.stringify(result.data);
-              break;
-            case "memory_get":
-              result = await adapter.getFact(projectName, input.key);
-              output = result.rawResponse || JSON.stringify(result.data);
-              break;
-            case "memory_search":
-              result = await adapter.searchMemory(projectName, input.query);
-              output = result.rawResponse || JSON.stringify(result.data);
-              break;
-            case "memory_history":
-              result = await adapter.getHistory(projectName, input.key);
-              output = result.rawResponse || JSON.stringify(result.data);
-              break;
-            default:
-              output = `Unknown tool: ${toolCall.name}`;
+          if (useNativeTools && nativeToolNames.has(toolCall.name)) {
+            // Native passthrough — call the MCP tool directly
+            const result = await adapter.callNativeTool!(
+              projectName,
+              toolCall.name,
+              input
+            );
+            output = result.rawResponse || JSON.stringify(result.data);
+          } else {
+            // Generic fallback — route through adapter methods
+            let result;
+            const stringInput = input as Record<string, string>;
+            switch (toolCall.name) {
+              case "memory_store":
+                result = await adapter.storeFact(projectName, stringInput.key, stringInput.value);
+                output = result.rawResponse || JSON.stringify(result.data);
+                break;
+              case "memory_get":
+                result = await adapter.getFact(projectName, stringInput.key);
+                output = result.rawResponse || JSON.stringify(result.data);
+                break;
+              case "memory_search":
+                result = await adapter.searchMemory(projectName, stringInput.query);
+                output = result.rawResponse || JSON.stringify(result.data);
+                break;
+              case "memory_history":
+                result = await adapter.getHistory(projectName, stringInput.key);
+                output = result.rawResponse || JSON.stringify(result.data);
+                break;
+              default:
+                output = `Unknown tool: ${toolCall.name}`;
+            }
           }
         } catch (err) {
           output = `Error: ${err instanceof Error ? err.message : String(err)}`;

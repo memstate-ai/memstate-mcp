@@ -1,4 +1,4 @@
-import { MemoryAdapter, ToolCallResult } from "../types";
+import { MemoryAdapter, ToolCallResult, NativeToolDefinition } from "../types";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -8,9 +8,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
  * Wraps any MCP memory server that exposes standard memory tools.
  * Uses stdio transport to launch the MCP server as a subprocess.
  *
- * Each memory system must declare a tool mapping in its config
- * so the adapter knows which MCP tool names correspond to
- * store/get/search/history/delete operations.
+ * Supports two modes:
+ * 1. **Native passthrough** (preferred): Discovers tools from the MCP server
+ *    and exposes them directly to the agent. The agent sees the real tool names
+ *    (e.g., memstate_set, memstate_get) exactly as a customer would.
+ * 2. **Generic mapping** (fallback): Maps generic operations (store/get/search)
+ *    to MCP tool names via toolMapping config.
  */
 export interface MCPAdapterConfig {
   name: string;
@@ -36,6 +39,17 @@ export interface MCPAdapterConfig {
     value?: string;
     query?: string;
   };
+  /**
+   * The parameter name that identifies the project in native tool calls.
+   * When the agent calls a native tool, the adapter auto-injects this param.
+   * Default: "project_id"
+   */
+  projectParam?: string;
+  /**
+   * Tool names to exclude from native tool exposure (e.g., delete tools
+   * that the agent shouldn't call directly during benchmark sessions).
+   */
+  excludeNativeTools?: string[];
 }
 
 export class MCPMemoryAdapter implements MemoryAdapter {
@@ -43,6 +57,7 @@ export class MCPMemoryAdapter implements MemoryAdapter {
   private config: MCPAdapterConfig;
   private client: Client | null = null;
   private transport: StdioClientTransport | null = null;
+  private nativeTools: NativeToolDefinition[] = [];
 
   constructor(config: MCPAdapterConfig) {
     this.name = config.name;
@@ -63,74 +78,45 @@ export class MCPMemoryAdapter implements MemoryAdapter {
 
     await this.client.connect(this.transport);
 
-    // Verify the server exposes the expected tools
+    // Discover native tools from the MCP server
     const tools = await this.client.listTools();
+    const excludeSet = new Set(this.config.excludeNativeTools || []);
+
+    this.nativeTools = tools.tools
+      .filter((t) => !excludeSet.has(t.name))
+      .map((t) => ({
+        name: t.name,
+        description: t.description || "",
+        inputSchema: (t.inputSchema as Record<string, unknown>) || { type: "object", properties: {}, required: [] },
+      }));
+
+    // Verify the server exposes the tools needed for generic fallback
     const toolNames = tools.tools.map((t) => t.name);
     const requiredTools = Object.values(this.config.toolMapping);
     const missing = requiredTools.filter((t) => !toolNames.includes(t));
     if (missing.length > 0) {
-      throw new Error(
-        `${this.name}: MCP server missing required tools: ${missing.join(", ")}. ` +
-        `Available: ${toolNames.join(", ")}`
+      console.warn(
+        `${this.name}: MCP server missing some mapped tools: ${missing.join(", ")}. ` +
+        `Available: ${toolNames.join(", ")}. Native passthrough will still work.`
       );
     }
   }
 
-  async storeFact(
+  /**
+   * Return the native MCP tools discovered from the server.
+   * These are exposed directly to the agent — no generic wrappers.
+   */
+  getNativeTools(): NativeToolDefinition[] {
+    return this.nativeTools;
+  }
+
+  /**
+   * Call a native MCP tool by name, auto-injecting the project_id.
+   */
+  async callNativeTool(
     project: string,
-    key: string,
-    value: string
-  ): Promise<ToolCallResult> {
-    return this.callTool(this.config.toolMapping.store, {
-      [this.param("project")]: project,
-      [this.param("key")]: key,
-      [this.param("value")]: value,
-    });
-  }
-
-  async getFact(project: string, key: string): Promise<ToolCallResult> {
-    return this.callTool(this.config.toolMapping.get, {
-      [this.param("project")]: project,
-      [this.param("key")]: key,
-    });
-  }
-
-  async searchMemory(project: string, query: string): Promise<ToolCallResult> {
-    return this.callTool(this.config.toolMapping.search, {
-      [this.param("project")]: project,
-      [this.param("query")]: query,
-    });
-  }
-
-  async getHistory(project: string, key: string): Promise<ToolCallResult> {
-    return this.callTool(this.config.toolMapping.history, {
-      [this.param("project")]: project,
-      [this.param("key")]: key,
-    });
-  }
-
-  async deleteProject(project: string): Promise<ToolCallResult> {
-    return this.callTool(this.config.toolMapping.deleteProject, {
-      [this.param("project")]: project,
-    });
-  }
-
-  async disconnect(): Promise<void> {
-    if (this.transport) {
-      await this.transport.close();
-    }
-    this.client = null;
-    this.transport = null;
-  }
-
-  private param(generic: string): string {
-    const mapping = this.config.paramMapping || {};
-    return (mapping as Record<string, string>)[generic] || generic;
-  }
-
-  private async callTool(
     toolName: string,
-    args: Record<string, string>
+    args: Record<string, unknown>
   ): Promise<ToolCallResult> {
     if (!this.client) {
       return {
@@ -141,9 +127,20 @@ export class MCPMemoryAdapter implements MemoryAdapter {
       };
     }
 
+    const projectParam = this.config.projectParam || "project_id";
+
+    // Auto-inject project_id if not already provided by the agent
+    const finalArgs = { ...args };
+    if (!(projectParam in finalArgs)) {
+      finalArgs[projectParam] = project;
+    }
+
     const start = Date.now();
     try {
-      const result = await this.client.callTool({ name: toolName, arguments: args });
+      const result = await this.client.callTool({
+        name: toolName,
+        arguments: finalArgs as Record<string, string>,
+      });
       const latencyMs = Date.now() - start;
       const rawResponse = JSON.stringify(result);
 
@@ -163,6 +160,54 @@ export class MCPMemoryAdapter implements MemoryAdapter {
         latencyMs: Date.now() - start,
       };
     }
+  }
+
+  // ─── Generic adapter methods (used for preloading facts, cleanup, etc.) ───
+
+  async storeFact(
+    project: string,
+    key: string,
+    value: string
+  ): Promise<ToolCallResult> {
+    return this.callNativeTool(project, this.config.toolMapping.store, {
+      [this.param("key")]: key,
+      [this.param("value")]: value,
+    });
+  }
+
+  async getFact(project: string, key: string): Promise<ToolCallResult> {
+    return this.callNativeTool(project, this.config.toolMapping.get, {
+      [this.param("key")]: key,
+    });
+  }
+
+  async searchMemory(project: string, query: string): Promise<ToolCallResult> {
+    return this.callNativeTool(project, this.config.toolMapping.search, {
+      [this.param("query")]: query,
+    });
+  }
+
+  async getHistory(project: string, key: string): Promise<ToolCallResult> {
+    return this.callNativeTool(project, this.config.toolMapping.history, {
+      [this.param("key")]: key,
+    });
+  }
+
+  async deleteProject(project: string): Promise<ToolCallResult> {
+    return this.callNativeTool(project, this.config.toolMapping.deleteProject, {});
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.transport) {
+      await this.transport.close();
+    }
+    this.client = null;
+    this.transport = null;
+  }
+
+  private param(generic: string): string {
+    const mapping = this.config.paramMapping || {};
+    return (mapping as Record<string, string>)[generic] || generic;
   }
 }
 

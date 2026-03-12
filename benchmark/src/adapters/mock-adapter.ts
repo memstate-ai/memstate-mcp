@@ -1,9 +1,12 @@
-import { MemoryAdapter, ToolCallResult } from "../types";
+import { MemoryAdapter, ToolCallResult, NativeToolDefinition } from "../types";
 
 /**
  * In-memory mock adapter for testing the benchmark pipeline.
  * Implements the same interface as real MCP adapters but stores
  * everything in a local Map. Supports versioning and history.
+ *
+ * Exposes generic tool definitions via getNativeTools() so the
+ * agent loop can use the same native passthrough path for testing.
  */
 export class MockMemoryAdapter implements MemoryAdapter {
   name = "MockMemory";
@@ -11,6 +14,84 @@ export class MockMemoryAdapter implements MemoryAdapter {
 
   async initialize(): Promise<void> {
     // No-op
+  }
+
+  getNativeTools(): NativeToolDefinition[] {
+    return [
+      {
+        name: "memory_store",
+        description: "Store a fact in memory. Use dot-separated keypaths.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_id: { type: "string", description: "Project identifier" },
+            key: { type: "string", description: "Dot-separated keypath" },
+            value: { type: "string", description: "The value to store" },
+          },
+          required: ["project_id", "key", "value"],
+        },
+      },
+      {
+        name: "memory_get",
+        description: "Retrieve a fact or browse memory.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_id: { type: "string", description: "Project identifier" },
+            key: { type: "string", description: "Dot-separated keypath" },
+          },
+          required: ["project_id", "key"],
+        },
+      },
+      {
+        name: "memory_search",
+        description: "Search memory by meaning using natural language.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_id: { type: "string", description: "Project identifier" },
+            query: { type: "string", description: "Natural language search query" },
+          },
+          required: ["project_id", "query"],
+        },
+      },
+      {
+        name: "memory_history",
+        description: "View the version history of a specific keypath.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_id: { type: "string", description: "Project identifier" },
+            key: { type: "string", description: "Dot-separated keypath" },
+          },
+          required: ["project_id", "key"],
+        },
+      },
+    ];
+  }
+
+  async callNativeTool(
+    project: string,
+    toolName: string,
+    args: Record<string, unknown>
+  ): Promise<ToolCallResult> {
+    switch (toolName) {
+      case "memory_store":
+        return this.storeFact(project, args.key as string, args.value as string);
+      case "memory_get":
+        return this.getFact(project, (args.key as string) || "");
+      case "memory_search":
+        return this.searchMemory(project, args.query as string);
+      case "memory_history":
+        return this.getHistory(project, args.key as string);
+      default:
+        return {
+          success: false,
+          error: `Unknown tool: ${toolName}`,
+          tokenCount: 0,
+          latencyMs: 0,
+        };
+    }
   }
 
   async storeFact(project: string, key: string, value: string): Promise<ToolCallResult> {

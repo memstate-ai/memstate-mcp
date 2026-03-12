@@ -27,6 +27,8 @@ export const ADAPTER_PRESETS: Record<string, MCPAdapterConfig> = {
       value: "value",
       query: "query",
     },
+    projectParam: "project_id",
+    excludeNativeTools: ["memstate_delete", "memstate_delete_project"],
   },
 
   mem0: {
