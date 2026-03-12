@@ -32,16 +32,43 @@ const API_KEY = process.env.MEMSTATE_API_KEY ?? "";
 const MCP_URL = process.env.MEMSTATE_MCP_URL ?? "https://mcp.memstate.ai";
 const TEST_MODE = process.argv.includes("--test");
 
+/**
+ * Create a proxy-aware fetch function when HTTPS_PROXY is set.
+ * Node.js native fetch() does not honor HTTP_PROXY/HTTPS_PROXY env vars,
+ * so we use undici's ProxyAgent to route through the proxy.
+ */
+function createProxyFetch(): typeof globalThis.fetch | undefined {
+  const proxyUrl =
+    process.env.HTTPS_PROXY || process.env.https_proxy ||
+    process.env.HTTP_PROXY || process.env.http_proxy;
+  if (!proxyUrl) return undefined;
+
+  try {
+    // undici is bundled with Node.js but may need explicit require
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ProxyAgent, fetch: undiciFetch } = require("undici");
+    const dispatcher = new ProxyAgent(proxyUrl);
+    return ((url: any, init: any) =>
+      undiciFetch(url, { ...init, dispatcher })) as unknown as typeof globalThis.fetch;
+  } catch {
+    // If undici is not available, fall back to native fetch
+    return undefined;
+  }
+}
+
 async function connectRemote(): Promise<Client> {
   const remote = new Client(
     { name: "@memstate/mcp", version: VERSION },
     { capabilities: {} }
   );
 
+  const proxyFetch = createProxyFetch();
+
   const httpTransport = new StreamableHTTPClientTransport(new URL(MCP_URL), {
     requestInit: {
       headers: { "X-API-Key": API_KEY },
     },
+    ...(proxyFetch ? { fetch: proxyFetch } : {}),
   });
 
   await remote.connect(httpTransport);
