@@ -1,20 +1,14 @@
 {
-  "timestamp": "2026-03-12T05:55:13.538Z",
+  "timestamp": "2026-03-12T11:11:51.621Z",
   "adapters": [
     {
-      "name": "Memstate",
-      "overallScore": 69.14,
-      "jsonFile": "memstate-2026-03-12T05-55-13.json",
-      "mdFile": "memstate-2026-03-12T05-55-13.md"
-    },
-    {
       "name": "Mem0",
-      "overallScore": 15.39,
-      "jsonFile": "mem0-2026-03-12T05-55-13.json",
-      "mdFile": "mem0-2026-03-12T05-55-13.md"
+      "overallScore": 20.35,
+      "jsonFile": "mem0-2026-03-12T11-11-51.json",
+      "mdFile": "mem0-2026-03-12T11-11-51.md"
     }
   ],
-  "winner": "Memstate",
+  "winner": "Mem0",
   "agentModel": "anthropic/claude-sonnet-4.6",
   "agentProvider": "openai-compatible"
 }
