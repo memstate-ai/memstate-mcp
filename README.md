@@ -76,7 +76,7 @@ The benchmark reveals a fundamental architectural difference:
 
 - Both systems used the same agent model, temperature, and evaluation rubric
 - Mem0 was given a 10-second ingestion delay between writes and reads to account for its async embedding pipeline
-- Token efficiency is the one area where Mem0 scores higher — its embedding-based retrieval can be more compact for simple lookups
+- Mem0 scores higher on token efficiency, but this metric should be read in context — lower token usage can simply reflect less information being returned. A system that retrieves incomplete or incorrect facts uses fewer tokens per response but may require more follow-up calls, ultimately costing more tokens to reach the same answer
 - The benchmark source code is included in this repository for full reproducibility
 - Mem0 may perform differently with custom configuration or a different embedding model
 
