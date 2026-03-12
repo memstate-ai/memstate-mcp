@@ -62,7 +62,6 @@ export async function runBenchmark(
     provider: options.judgeProvider,
   });
 
-  const systemPrompt = buildSystemPrompt(options.agentsMdPath);
   const scenarios = selectScenarios(options.scenarios);
   const results: BenchmarkResult[] = [];
 
@@ -91,6 +90,13 @@ export async function runBenchmark(
     if (!adapter) {
       console.error(`Unknown adapter: ${adapterName}. Skipping.`);
       continue;
+    }
+
+    // Resolve per-adapter AGENTS.md: check for AGENTS-<name>.md first, fall back to --agents-md
+    const adapterAgentsMd = resolveAgentsMdPath(adapterName, options.agentsMdPath);
+    const systemPrompt = buildSystemPrompt(adapterAgentsMd);
+    if (adapterAgentsMd) {
+      console.log(`  AGENTS.md: ${adapterAgentsMd}`);
     }
 
     try {
@@ -226,6 +232,19 @@ export async function runBenchmark(
   saveResults(options.outputDir, results, comparison);
 
   return comparison;
+}
+
+/**
+ * Resolve per-adapter AGENTS.md path.
+ * Looks for benchmark/AGENTS-<adapter>.md first, then falls back to --agents-md.
+ */
+function resolveAgentsMdPath(adapterName: string, defaultPath?: string): string | undefined {
+  // Check for adapter-specific file: AGENTS-memstate.md, AGENTS-mem0.md, etc.
+  const adapterSpecific = path.resolve(__dirname, `../../AGENTS-${adapterName.toLowerCase()}.md`);
+  if (fs.existsSync(adapterSpecific)) {
+    return adapterSpecific;
+  }
+  return defaultPath;
 }
 
 function selectScenarios(ids: string[]): BenchmarkScenario[] {

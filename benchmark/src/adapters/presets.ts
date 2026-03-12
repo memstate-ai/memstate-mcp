@@ -33,25 +33,27 @@ export const ADAPTER_PRESETS: Record<string, MCPAdapterConfig> = {
 
   mem0: {
     name: "Mem0",
-    command: "npx",
-    args: ["-y", "mem0-mcp"],
+    command: "uvx",
+    args: ["mem0-mcp-server"],
     env: {
       MEM0_API_KEY: process.env.MEM0_API_KEY || "",
     },
     toolMapping: {
       store: "add_memory",
-      get: "get_memory",
-      search: "search_memory",
-      history: "get_memory",   // Mem0 may not have separate history
+      get: "get_memories",
+      search: "search_memories",
+      history: "get_memory",
       delete: "delete_memory",
-      deleteProject: "delete_memory",
+      deleteProject: "delete_all_memories",
     },
     paramMapping: {
       project: "user_id",
-      key: "key",
-      value: "content",
+      key: "memory_id",
+      value: "text",
       query: "query",
     },
+    projectParam: "user_id",
+    excludeNativeTools: ["delete_memory", "delete_all_memories", "delete_entities"],
   },
 };
 

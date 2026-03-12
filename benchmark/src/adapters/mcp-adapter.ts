@@ -129,9 +129,10 @@ export class MCPMemoryAdapter implements MemoryAdapter {
 
     const projectParam = this.config.projectParam || "project_id";
 
-    // Auto-inject project_id if not already provided by the agent
+    // Auto-inject project_id if not already provided by the agent,
+    // but skip injection when memory_id is present (different lookup mode)
     const finalArgs = { ...args };
-    if (!(projectParam in finalArgs)) {
+    if (!(projectParam in finalArgs) && !("memory_id" in finalArgs)) {
       finalArgs[projectParam] = project;
     }
 
