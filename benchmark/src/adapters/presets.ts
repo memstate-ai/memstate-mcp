@@ -8,8 +8,8 @@ import { MCPAdapterConfig } from "./mcp-adapter";
 export const ADAPTER_PRESETS: Record<string, MCPAdapterConfig> = {
   memstate: {
     name: "Memstate",
-    command: "npx",
-    args: ["-y", "@memstate/mcp"],
+    command: "node",
+    args: [require("path").resolve(__dirname, "../../../dist/index.js")],
     env: {
       MEMSTATE_API_KEY: process.env.MEMSTATE_API_KEY || "",
     },
