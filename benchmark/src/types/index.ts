@@ -84,6 +84,12 @@ export interface ExpectedConflict {
 
 // ─── MCP Memory Adapter ──────────────────────────────────────────────────────
 
+export interface NativeToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
 export interface MemoryAdapter {
   name: string;
   /** Initialize connection to the MCP memory system */
@@ -100,6 +106,16 @@ export interface MemoryAdapter {
   deleteProject(project: string): Promise<ToolCallResult>;
   /** Disconnect */
   disconnect(): Promise<void>;
+  /**
+   * Get the native tool definitions from the MCP server.
+   * If supported, these are exposed directly to the agent instead of generic wrappers.
+   */
+  getNativeTools?(): NativeToolDefinition[];
+  /**
+   * Call a native MCP tool by name with raw arguments.
+   * The adapter auto-injects the project_id.
+   */
+  callNativeTool?(project: string, toolName: string, args: Record<string, unknown>): Promise<ToolCallResult>;
 }
 
 export interface ToolCallResult {

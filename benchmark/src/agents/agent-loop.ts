@@ -65,13 +65,13 @@ function buildToolDefinitions(): ToolDefinition[] {
     {
       name: "memory_store",
       description:
-        "Store a fact in the project's memory. Use structured keypaths like 'project/category/item'.",
+        "Store a fact in the project's memory. Use dot-separated keypaths like 'database.schema.users'. The project name is added automatically — do NOT include it in the keypath.",
       parameters: {
         type: "object",
         properties: {
           key: {
             type: "string",
-            description: "The keypath to store the fact under (e.g., 'myproject/frontend/framework')",
+            description: "Dot-separated keypath (e.g., 'frontend.framework', 'database.schema.users'). Do NOT include the project name.",
           },
           value: {
             type: "string",
@@ -84,13 +84,13 @@ function buildToolDefinitions(): ToolDefinition[] {
     {
       name: "memory_get",
       description:
-        "Retrieve a fact or browse memory. Use a keypath to get a specific fact, or a partial path to browse a subtree.",
+        "Retrieve a fact or browse memory. Use a dot-separated keypath to get a specific fact, or omit the key to browse everything. The project name is added automatically.",
       parameters: {
         type: "object",
         properties: {
           key: {
             type: "string",
-            description: "The keypath to retrieve (e.g., 'myproject/frontend' to browse all frontend facts)",
+            description: "Dot-separated keypath to retrieve (e.g., 'database.schema' to browse all schema facts). Leave empty to browse entire project.",
           },
         },
         required: ["key"],
@@ -99,7 +99,7 @@ function buildToolDefinitions(): ToolDefinition[] {
     {
       name: "memory_search",
       description:
-        "Search memory by meaning. Use natural language to find relevant facts.",
+        "Search memory by meaning. Use natural language to find relevant facts across the project.",
       parameters: {
         type: "object",
         properties: {
@@ -120,7 +120,7 @@ function buildToolDefinitions(): ToolDefinition[] {
         properties: {
           key: {
             type: "string",
-            description: "The keypath to get history for",
+            description: "Dot-separated keypath to get history for (e.g., 'database.type')",
           },
         },
         required: ["key"],

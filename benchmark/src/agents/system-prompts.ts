@@ -22,11 +22,13 @@ You have access to a MEMORY SYSTEM via tools. Use it to:
 4. CHECK HISTORY to understand how decisions have evolved over time
 
 IMPORTANT GUIDELINES:
-- When storing facts, use structured keypaths (e.g., "projectname/frontend/framework")
+- Use dot-separated keypaths (e.g., "database.schema.users", "frontend.framework"). The project name is added automatically — do NOT include it in keypaths.
 - When a decision CHANGES, update the existing key — do not create a new key
 - When retrieving information, always check if it might be outdated
 - If you find conflicting information, acknowledge the conflict and determine what's current
 - Be thorough: store ALL relevant facts from the prompt, not just the first few
+- BEFORE starting work, use memory_get with an empty or root key to see what already exists
+- AFTER completing work, store a summary of what was decided and changed
 
 You are evaluated on:
 - Whether you correctly store all facts

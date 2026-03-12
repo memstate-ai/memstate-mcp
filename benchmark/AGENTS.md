@@ -10,52 +10,34 @@ When you run the benchmark with `--agents-md ./AGENTS.md`, the contents of
 this file are appended to the agent's system prompt — **identically for all
 memory adapters being tested**. This ensures fairness.
 
-## Project Name
+## Memory Tool Usage
 
-**Use the project name provided in each scenario prompt when storing memories.**
-The project name is embedded in the task prompt (e.g., "TaskFlow", "SecureApp",
-"BlogEngine", "DataHub", "ShopStream"). Use this as the project_id when calling
-memory tools.
+You have 4 memory tools: `memory_store`, `memory_get`, `memory_search`, `memory_history`.
 
-## Memstate MCP - Memory Storage
+### Keypaths
 
-This project uses Memstate MCP for versioned memory. Keypaths are hierarchical
-(e.g. `project.myapp.database`). Memstate handles versioning and conflict detection.
-
-### Which tool when
-
-- **memstate_remember** — PREFERRED for markdown, task summaries, meeting notes.
-  Server extracts keypaths and creates structured memories. Use after tasks.
-- **memstate_set** — Only for one keypath = one short value (e.g. config.port, status).
-  Not for summaries.
-- **memstate_get** — Browse project, fetch existing knowledge before tasks.
-- **memstate_search** — Find by meaning when you don't know the keypath.
-- **memstate_history** — View version history of a keypath or memory.
+- Use **dot-separated** keypaths: `database.schema.users`, `frontend.framework`
+- The project name is added automatically — do **NOT** include it in keypaths
+- Keep keypaths short and descriptive
+- Group related facts: `database.schema.users`, `database.schema.posts`
 
 ### Before each task
 
-Check what already exists:
-`memstate_get(project_id="myproject")` or `memstate_search(query="topic", project_id="myproject")`
+Always check what already exists first:
+- `memory_get(key="")` — browse the full project tree
+- `memory_search(query="topic")` — find by meaning when you don't know the keypath
 
 ### After each task
 
-**Preferred — save markdown with remember:**
-```
-memstate_remember(project_id="myproject", content="## Task Summary\n- What was done\n- Key changes\n- Files modified", source="agent")
-```
+Store ALL key decisions and facts:
+- `memory_store(key="database.type", value="PostgreSQL")`
+- `memory_store(key="database.schema.users", value="id UUID PK, username VARCHAR(50), email VARCHAR(255), created_at TIMESTAMP")`
 
-**Only for a single value:**
-`memstate_set(project_id="myproject", keypath="config.port", value="8080")`
+### When facts change
 
-Keypaths are auto-prefixed: `keypath="database"` → `project.myproject.database`.
-Use short project_id: `myapp`, `memstate`, etc.
-
-## Memory Storage Conventions
-
-- Store facts using hierarchical keypaths: `project/category/subcategory/item`
-- Use descriptive values, not just "yes" or "no"
-- When updating a fact, include context about what changed and why
-- Group related facts under common parent keypaths
+- Update the SAME keypath with the new value (do not create a new key)
+- Include context about what changed in the value
+- Use `memory_history(key="database.type")` to review how decisions evolved
 
 ## Decision Tracking
 
