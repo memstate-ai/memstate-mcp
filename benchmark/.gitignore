@@ -1,0 +1,4 @@
+node_modules
+dist
+benchmark-results
+test-results
