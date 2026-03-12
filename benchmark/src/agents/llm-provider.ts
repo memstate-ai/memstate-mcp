@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { LLMProviderConfig } from "../types";
+import { LLMProviderConfig, resolveApiKey } from "../types";
 import { ToolDefinition } from "./agent-loop";
 
 /**
@@ -71,8 +71,9 @@ class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
 
   constructor(config: LLMProviderConfig) {
+    const apiKey = resolveApiKey(config);
     this.client = new Anthropic({
-      apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY,
+      ...(apiKey ? { apiKey } : {}),
       ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
     });
   }
@@ -185,7 +186,7 @@ class OpenAICompatibleProvider implements LLMProvider {
 
   constructor(config: LLMProviderConfig) {
     this.name = `openai-compatible(${config.baseUrl || "api.openai.com"})`;
-    this.apiKey = config.apiKey || process.env.OPENAI_API_KEY || "";
+    this.apiKey = resolveApiKey(config);
     this.baseUrl = (config.baseUrl || "https://api.openai.com/v1").replace(/\/$/, "");
   }
 

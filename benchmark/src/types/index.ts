@@ -133,60 +133,107 @@ export type LLMProviderType = "anthropic" | "openai-compatible";
 export interface LLMProviderConfig {
   /** Provider type */
   provider: LLMProviderType;
-  /** API key (falls back to env vars: ANTHROPIC_API_KEY, OPENAI_API_KEY) */
+  /** API key (falls back to env vars based on provider preset) */
   apiKey?: string;
   /** Base URL override (for Gemini, Qwen, local models, etc.) */
   baseUrl?: string;
+  /**
+   * Environment variable names to check for the API key, in priority order.
+   * The first one found wins. Set automatically by provider presets.
+   */
+  envVarNames?: string[];
+}
+
+/**
+ * Resolve the API key for a provider config.
+ * Checks in order: explicit apiKey → envVarNames → generic fallbacks.
+ */
+export function resolveApiKey(config: LLMProviderConfig): string {
+  // 1. Explicit key always wins
+  if (config.apiKey) return config.apiKey;
+
+  // 2. Check provider-specific env vars
+  if (config.envVarNames) {
+    for (const envVar of config.envVarNames) {
+      const val = process.env[envVar];
+      if (val) return val;
+    }
+  }
+
+  // 3. Generic fallbacks by provider type
+  if (config.provider === "anthropic") {
+    return process.env.ANTHROPIC_API_KEY || "";
+  }
+  return process.env.OPENAI_API_KEY || "";
 }
 
 /**
  * Well-known provider presets for common LLM services.
- * Use these with --agent-provider or --judge-provider flags.
+ * Each preset includes the env var names that the provider's API key
+ * is commonly stored under.
+ *
+ * API Key Resolution Order (per provider):
+ *   1. --agent-api-key / --judge-api-key  (CLI flag)
+ *   2. Provider-specific env var           (e.g., GEMINI_API_KEY)
+ *   3. Generic env var                     (ANTHROPIC_API_KEY or OPENAI_API_KEY)
  *
  * Examples:
- *   anthropic          → Claude models (Opus, Sonnet, Haiku)
- *   openai             → OpenAI models (GPT-4o, o1, o3)
- *   gemini             → Google Gemini via OpenAI-compatible endpoint
- *   qwen               → Alibaba Qwen via DashScope
- *   deepseek           → Deepseek models
- *   ollama             → Local models via Ollama
- *   custom:<base_url>  → Any OpenAI-compatible endpoint
+ *   anthropic   → ANTHROPIC_API_KEY
+ *   openai      → OPENAI_API_KEY
+ *   gemini      → GEMINI_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY
+ *   qwen        → DASHSCOPE_API_KEY, QWEN_API_KEY, OPENAI_API_KEY
+ *   deepseek    → DEEPSEEK_API_KEY, OPENAI_API_KEY
+ *   ollama      → (no key needed)
  */
 export const PROVIDER_PRESETS: Record<string, LLMProviderConfig> = {
   anthropic: {
     provider: "anthropic",
+    envVarNames: ["ANTHROPIC_API_KEY"],
   },
   openai: {
     provider: "openai-compatible",
     baseUrl: "https://api.openai.com/v1",
+    envVarNames: ["OPENAI_API_KEY"],
   },
   gemini: {
     provider: "openai-compatible",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    envVarNames: ["GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"],
   },
   qwen: {
     provider: "openai-compatible",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    envVarNames: ["DASHSCOPE_API_KEY", "QWEN_API_KEY", "OPENAI_API_KEY"],
   },
   deepseek: {
     provider: "openai-compatible",
     baseUrl: "https://api.deepseek.com/v1",
+    envVarNames: ["DEEPSEEK_API_KEY", "OPENAI_API_KEY"],
   },
   groq: {
     provider: "openai-compatible",
     baseUrl: "https://api.groq.com/openai/v1",
+    envVarNames: ["GROQ_API_KEY", "OPENAI_API_KEY"],
   },
   together: {
     provider: "openai-compatible",
     baseUrl: "https://api.together.xyz/v1",
+    envVarNames: ["TOGETHER_API_KEY", "OPENAI_API_KEY"],
   },
   fireworks: {
     provider: "openai-compatible",
     baseUrl: "https://api.fireworks.ai/inference/v1",
+    envVarNames: ["FIREWORKS_API_KEY", "OPENAI_API_KEY"],
+  },
+  openrouter: {
+    provider: "openai-compatible",
+    baseUrl: "https://openrouter.ai/api/v1",
+    envVarNames: ["OPENROUTER_API_KEY", "OPENAI_API_KEY"],
   },
   ollama: {
     provider: "openai-compatible",
     baseUrl: "http://localhost:11434/v1",
+    envVarNames: [], // Ollama doesn't need an API key
   },
 };
 

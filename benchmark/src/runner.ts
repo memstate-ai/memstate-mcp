@@ -22,6 +22,7 @@ import {
   compareResults,
   formatSingleResult,
   formatComparisonResult,
+  generateSingleResultMarkdown,
   generateMarkdownReport,
   setJudgeConfig,
 } from "./metrics";
@@ -266,26 +267,58 @@ function saveResults(
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Save raw JSON results
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const savedFiles: string[] = [];
+
+  // ── Per-adapter: detailed JSON + markdown (always saved) ──
+
   for (const result of results) {
-    const filename = `${result.adapterName.toLowerCase()}-${result.benchmarkId}.json`;
-    fs.writeFileSync(
-      path.join(dir, filename),
-      JSON.stringify(result, null, 2)
-    );
+    const prefix = `${result.adapterName.toLowerCase()}-${timestamp}`;
+
+    // Full JSON with all agent turns, tool calls, verification details
+    const jsonPath = path.join(dir, `${prefix}.json`);
+    fs.writeFileSync(jsonPath, JSON.stringify(result, null, 2));
+    savedFiles.push(jsonPath);
+
+    // Detailed markdown report
+    const mdPath = path.join(dir, `${prefix}.md`);
+    fs.writeFileSync(mdPath, generateSingleResultMarkdown(result));
+    savedFiles.push(mdPath);
   }
 
-  // Save comparison
+  // ── Comparison: JSON + markdown (when multiple adapters) ──
+
   if (results.length > 1) {
-    fs.writeFileSync(
-      path.join(dir, `comparison-${Date.now()}.json`),
-      JSON.stringify(comparison, null, 2)
-    );
+    const compJsonPath = path.join(dir, `comparison-${timestamp}.json`);
+    fs.writeFileSync(compJsonPath, JSON.stringify(comparison, null, 2));
+    savedFiles.push(compJsonPath);
 
-    // Save markdown report
-    const markdown = generateMarkdownReport(comparison);
-    fs.writeFileSync(path.join(dir, `results.md`), markdown);
+    const compMdPath = path.join(dir, `comparison-${timestamp}.md`);
+    fs.writeFileSync(compMdPath, generateMarkdownReport(comparison));
+    savedFiles.push(compMdPath);
   }
+
+  // ── Summary index: a latest-results.json that always points to the most recent run ──
+
+  const summaryIndex = {
+    timestamp: new Date().toISOString(),
+    adapters: results.map((r) => ({
+      name: r.adapterName,
+      overallScore: r.aggregate.overallScore,
+      jsonFile: path.basename(savedFiles.find((f) => f.endsWith(".json") && f.includes(r.adapterName.toLowerCase()))!),
+      mdFile: path.basename(savedFiles.find((f) => f.endsWith(".md") && f.includes(r.adapterName.toLowerCase()))!),
+    })),
+    winner: comparison.winner,
+    agentModel: results[0]?.agentConfig.model,
+    agentProvider: results[0]?.agentConfig.provider.provider,
+  };
+  fs.writeFileSync(
+    path.join(dir, "latest-results.json"),
+    JSON.stringify(summaryIndex, null, 2)
+  );
 
   console.log(`\nResults saved to: ${dir}`);
+  for (const f of savedFiles) {
+    console.log(`  ${path.basename(f)}`);
+  }
 }

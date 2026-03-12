@@ -242,6 +242,7 @@ npx memory-benchmark run -a memstate \
 | Anthropic | `anthropic` | Native SDK | claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-5-20251001 |
 | OpenAI | `openai` | api.openai.com | gpt-4o, gpt-4o-mini, o1, o3 |
 | Google Gemini | `gemini` | generativelanguage.googleapis.com | gemini-2.0-flash, gemini-2.5-pro |
+| OpenRouter | `openrouter` | openrouter.ai/api/v1 | Any model via OpenRouter (anthropic/claude-3.5-sonnet, google/gemini-2.0-flash, etc.) |
 | Qwen | `qwen` | dashscope.aliyuncs.com | qwen-plus, qwen-max, qwen2.5-72b-instruct |
 | Deepseek | `deepseek` | api.deepseek.com | deepseek-chat, deepseek-reasoner |
 | Groq | `groq` | api.groq.com | llama-3.1-70b, mixtral-8x7b |
@@ -249,6 +250,50 @@ npx memory-benchmark run -a memstate \
 | Fireworks | `fireworks` | api.fireworks.ai | accounts/fireworks/models/llama-v3p1-70b |
 | Ollama | `ollama` | localhost:11434 | llama3.1:70b, qwen2.5:32b |
 | Custom URL | `https://...` | (your URL) | (any model) |
+
+### API Key Resolution
+
+API keys are resolved in this priority order:
+
+1. **CLI flag** (`--agent-api-key` / `--judge-api-key`) — always wins
+2. **Provider-specific env var** — each provider checks its own env vars first
+3. **Generic fallback** — `ANTHROPIC_API_KEY` for anthropic, `OPENAI_API_KEY` for others
+
+| Provider | Environment Variables (checked in order) |
+|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Gemini | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENAI_API_KEY` |
+| OpenRouter | `OPENROUTER_API_KEY`, `OPENAI_API_KEY` |
+| Qwen | `DASHSCOPE_API_KEY`, `QWEN_API_KEY`, `OPENAI_API_KEY` |
+| Deepseek | `DEEPSEEK_API_KEY`, `OPENAI_API_KEY` |
+| Groq | `GROQ_API_KEY`, `OPENAI_API_KEY` |
+| Together | `TOGETHER_API_KEY`, `OPENAI_API_KEY` |
+| Fireworks | `FIREWORKS_API_KEY`, `OPENAI_API_KEY` |
+| Ollama | *(no key needed)* |
+
+Example:
+```bash
+# These are equivalent — Gemini checks GEMINI_API_KEY automatically
+GEMINI_API_KEY=key npx memory-benchmark run -a memstate -m gemini-2.0-flash --agent-provider gemini
+npx memory-benchmark run -a memstate -m gemini-2.0-flash --agent-provider gemini --agent-api-key $KEY
+
+# OpenRouter — use any model from any provider
+OPENROUTER_API_KEY=key npx memory-benchmark run -a memstate \
+  -m anthropic/claude-sonnet-4-20250514 --agent-provider openrouter
+```
+
+### Output Files
+
+Every benchmark run saves detailed results to the output directory (`--output`, default `./benchmark-results/`):
+
+| File | Contents |
+|---|---|
+| `<adapter>-<timestamp>.json` | Full JSON with all agent turns, tool calls, token counts, verification scores |
+| `<adapter>-<timestamp>.md` | Human-readable markdown report with tables and scores |
+| `comparison-<timestamp>.json` | Head-to-head comparison data (when multiple adapters) |
+| `comparison-<timestamp>.md` | Comparison markdown report (when multiple adapters) |
+| `latest-results.json` | Index pointing to the most recent run's files |
 
 ### Custom Adapter
 

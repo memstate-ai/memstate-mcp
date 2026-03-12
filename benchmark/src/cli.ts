@@ -18,7 +18,7 @@ program
     "  - Cross-session context continuity\n" +
     "  - Token efficiency\n\n" +
     "Supports multiple LLM providers for both agent and judge:\n" +
-    "  anthropic, openai, gemini, qwen, deepseek, groq, together, fireworks, ollama"
+    "  anthropic, openai, gemini, openrouter, qwen, deepseek, groq, together, fireworks, ollama"
   )
   .version("1.0.0");
 
@@ -43,7 +43,7 @@ program
   )
   .option(
     "--agent-provider <provider>",
-    "LLM provider for agent: anthropic, openai, gemini, qwen, deepseek, groq, together, fireworks, ollama, or a base URL",
+    "LLM provider for agent: anthropic, openai, gemini, openrouter, qwen, deepseek, groq, together, fireworks, ollama, or a base URL",
     "anthropic"
   )
   .option(
@@ -58,7 +58,7 @@ program
   )
   .option(
     "--judge-provider <provider>",
-    "LLM provider for judge: anthropic, openai, gemini, qwen, deepseek, groq, together, fireworks, ollama, or a base URL",
+    "LLM provider for judge: anthropic, openai, gemini, openrouter, qwen, deepseek, groq, together, fireworks, ollama, or a base URL",
     "anthropic"
   )
   .option(

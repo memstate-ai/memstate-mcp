@@ -10,5 +10,6 @@ export {
 export {
   formatSingleResult,
   formatComparisonResult,
+  generateSingleResultMarkdown,
   generateMarkdownReport,
 } from "./reporter";
