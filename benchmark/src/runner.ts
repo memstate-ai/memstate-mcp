@@ -79,6 +79,7 @@ export async function runBenchmark(
   console.log(`Agent:     ${agentConfig.model} (${agentProviderLabel})`);
   console.log(`Judge:     ${options.judgeModel} (${judgeProviderLabel})`);
   console.log(`Runs:      ${options.runs}`);
+  console.log(`Delay:     ${options.ingestionDelaySeconds}s (between store and verify)`);
   console.log(`${"─".repeat(50)}\n`);
 
   for (const adapterName of options.adapters) {
@@ -116,6 +117,7 @@ export async function runBenchmark(
 
       const projectName = `${options.projectPrefix}-${scenario.id}-${uuidv4().slice(0, 8)}`;
 
+      try {
       // Clean up any prior memory
       try {
         await adapter.deleteProject(projectName);
@@ -147,6 +149,16 @@ export async function runBenchmark(
         console.log(
           `      Agent: ${agentResult.turns.length} turns, ${agentResult.totalTokens.totalTokens} tokens, ${(agentResult.totalTimeMs / 1000).toFixed(1)}s`
         );
+
+        // Wait for async ingestion to complete (simulates realistic human pause)
+        if (options.ingestionDelaySeconds > 0) {
+          console.log(
+            `      Waiting ${options.ingestionDelaySeconds}s for ingestion...`
+          );
+          await new Promise((r) =>
+            setTimeout(r, options.ingestionDelaySeconds * 1000)
+          );
+        }
 
         // Run verification queries
         const answers = new Map<string, string>();
@@ -205,6 +217,15 @@ export async function runBenchmark(
         await adapter.deleteProject(projectName);
       } catch {
         // Best effort cleanup
+      }
+
+      } catch (scenarioErr) {
+        console.error(
+          `    ERROR in scenario ${scenario.id}: ${scenarioErr instanceof Error ? scenarioErr.message : String(scenarioErr)}`
+        );
+        console.error(`    Skipping scenario and continuing...`);
+        // Best effort cleanup
+        try { await adapter.deleteProject(projectName); } catch { /* ignore */ }
       }
     }
 

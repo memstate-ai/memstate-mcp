@@ -171,8 +171,9 @@ export async function runAgentLoop(
   // Determine whether to use native MCP tools or generic wrappers
   const useNativeTools = !!(adapter.getNativeTools && adapter.callNativeTool);
   const nativeTools = useNativeTools ? adapter.getNativeTools!() : [];
+  const projectParam = adapter.projectParamName ? adapter.projectParamName() : "project_id";
   const tools = useNativeTools
-    ? nativeToolsToDefinitions(nativeTools, "project_id")
+    ? nativeToolsToDefinitions(nativeTools, projectParam)
     : buildGenericToolDefinitions();
 
   // Track which tool names are native (for routing)

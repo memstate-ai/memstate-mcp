@@ -38,7 +38,7 @@ The team has made the following initial architecture decisions:
 - CSS: Tailwind CSS
 - Testing: Jest + React Testing Library
 
-Please store all of these architecture decisions in memory so they can be referenced in future sessions. Store them in a structured way using keypaths like "taskflow/frontend/framework", "taskflow/api/style", etc.
+Please store all of these architecture decisions in memory so they can be referenced in future sessions. Store each decision as a separate fact with a descriptive key (e.g., frontend framework, API style, database, etc.).
 
 After storing, confirm what you've stored by listing the key decisions.`,
       verificationQueries: [
@@ -89,9 +89,9 @@ Please UPDATE memory to reflect this change. The old REST API decision should be
 Confirm the updates you've made.`,
       preloadFacts: [
         {
-          key: "taskflow/api/style",
+          key: "taskflow.api.style",
           value: "GraphQL with Apollo Server (migrated from REST)",
-          contradictsKey: "taskflow/api/style",
+          contradictsKey: "taskflow.api.style",
         },
       ],
       verificationQueries: [

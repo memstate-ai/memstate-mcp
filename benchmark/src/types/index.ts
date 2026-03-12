@@ -116,6 +116,11 @@ export interface MemoryAdapter {
    * The adapter auto-injects the project_id.
    */
   callNativeTool?(project: string, toolName: string, args: Record<string, unknown>): Promise<ToolCallResult>;
+  /**
+   * The parameter name used for project isolation (e.g., "project_id" for memstate, "user_id" for mem0).
+   * Used to strip this param from tool definitions shown to the agent.
+   */
+  projectParamName?(): string;
 }
 
 export interface ToolCallResult {
@@ -396,4 +401,10 @@ export interface BenchmarkOptions {
   verbose: boolean;
   /** Project name prefix for memory isolation */
   projectPrefix: string;
+  /**
+   * Seconds to wait after each store session before running verification queries.
+   * Simulates a realistic human pause and gives async memory systems time to
+   * complete ingestion. Default: 5 seconds.
+   */
+  ingestionDelaySeconds: number;
 }

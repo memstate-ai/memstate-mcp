@@ -86,6 +86,11 @@ program
     "bench"
   )
   .option("-v, --verbose", "Verbose logging", false)
+  .option(
+    "--ingestion-delay <seconds>",
+    "Seconds to wait after each store session for async ingestion (simulates human pause)",
+    "5"
+  )
   .action(async (opts) => {
     const agentProvider = resolveProvider(opts.agentProvider, opts.agentApiKey);
     const judgeProvider = resolveProvider(opts.judgeProvider, opts.judgeApiKey);
@@ -102,6 +107,7 @@ program
       agentsMdPath: opts.agentsMd,
       verbose: opts.verbose,
       projectPrefix: opts.projectPrefix,
+      ingestionDelaySeconds: parseInt(opts.ingestionDelay, 10),
     };
 
     try {

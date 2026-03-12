@@ -111,6 +111,13 @@ export class MCPMemoryAdapter implements MemoryAdapter {
   }
 
   /**
+   * Return the project param name so the agent loop can strip it from tool definitions.
+   */
+  projectParamName(): string {
+    return this.config.projectParam || "project_id";
+  }
+
+  /**
    * Call a native MCP tool by name, auto-injecting the project_id.
    */
   async callNativeTool(
@@ -129,10 +136,12 @@ export class MCPMemoryAdapter implements MemoryAdapter {
 
     const projectParam = this.config.projectParam || "project_id";
 
-    // Auto-inject project_id if not already provided by the agent,
-    // but skip injection when memory_id is present (different lookup mode)
+    // Always inject the benchmark project name. The agent shouldn't be
+    // passing project_id (it's stripped from tool definitions), but if it
+    // does, we override it to ensure benchmark isolation.
+    // Exception: memory_id lookups don't need project_id.
     const finalArgs = { ...args };
-    if (!(projectParam in finalArgs) && !("memory_id" in finalArgs)) {
+    if (!("memory_id" in finalArgs)) {
       finalArgs[projectParam] = project;
     }
 
