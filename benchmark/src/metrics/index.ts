@@ -4,6 +4,8 @@ export {
   calculateScenarioScore,
   calculateAggregateScore,
   compareResults,
+  setJudgeConfig,
+  JudgeConfig,
 } from "./scorer";
 export {
   formatSingleResult,

@@ -23,6 +23,7 @@ import {
   formatSingleResult,
   formatComparisonResult,
   generateMarkdownReport,
+  setJudgeConfig,
 } from "./metrics";
 import * as fs from "fs";
 import * as path from "path";
@@ -48,20 +49,35 @@ export async function runBenchmark(
 ): Promise<ComparisonResult> {
   const agentConfig: AgentConfig = {
     model: options.model,
+    provider: options.agentProvider,
     maxTokens: 4096,
     maxIterations: 20,
     temperature: 0,
   };
 
+  // Configure the judge model
+  setJudgeConfig({
+    model: options.judgeModel,
+    provider: options.judgeProvider,
+  });
+
   const systemPrompt = buildSystemPrompt(options.agentsMdPath);
   const scenarios = selectScenarios(options.scenarios);
   const results: BenchmarkResult[] = [];
+
+  const agentProviderLabel = options.agentProvider.provider === "anthropic"
+    ? "anthropic"
+    : options.agentProvider.baseUrl || "openai-compatible";
+  const judgeProviderLabel = options.judgeProvider.provider === "anthropic"
+    ? "anthropic"
+    : options.judgeProvider.baseUrl || "openai-compatible";
 
   console.log(`\nMemory MCP Benchmark`);
   console.log(`${"─".repeat(50)}`);
   console.log(`Scenarios: ${scenarios.map((s) => s.id).join(", ")}`);
   console.log(`Adapters:  ${options.adapters.join(", ")}`);
-  console.log(`Model:     ${agentConfig.model}`);
+  console.log(`Agent:     ${agentConfig.model} (${agentProviderLabel})`);
+  console.log(`Judge:     ${options.judgeModel} (${judgeProviderLabel})`);
   console.log(`Runs:      ${options.runs}`);
   console.log(`${"─".repeat(50)}\n`);
 

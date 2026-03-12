@@ -149,10 +149,10 @@ Every adapter receives the exact same system prompt. The prompt never mentions a
 All agent runs use `temperature: 0` to minimize randomness. The agent should make the same tool-calling decisions given the same inputs.
 
 ### 3. Blind Scoring
-The judge model (Claude Haiku) never sees which adapter produced the answer. It only sees question + expected + actual.
+The judge model never sees which adapter produced the answer. It only sees question + expected + actual. The judge can be any LLM (default: Claude Haiku, configurable to GPT-4o-mini, Gemini Flash, etc.).
 
 ### 4. Same Model
-All runs use the same Claude model (configurable, default Sonnet). No adapter gets a "smarter" agent.
+All runs use the same LLM model (configurable, default Sonnet). No adapter gets a "smarter" agent. The agent and judge models are independently configurable, and both can use any supported provider.
 
 ### 5. Isolated Memory
 Each scenario run gets a unique project name (with UUID suffix). Adapters never see each other's data. Memory is cleaned up before and after each run.
@@ -170,7 +170,7 @@ All raw data (every agent turn, tool call, token count, latency) is saved as JSO
 
 ### Prerequisites
 - Node.js >= 18
-- `ANTHROPIC_API_KEY` environment variable
+- API key for at least one LLM provider (for the agent and judge)
 - API keys for each memory system you want to test
 
 ### Quick Start
@@ -180,7 +180,7 @@ cd benchmark
 npm install
 npm run build
 
-# Run against Memstate
+# Run against Memstate (default: Claude Sonnet agent + Claude Haiku judge)
 MEMSTATE_API_KEY=your-key npx memory-benchmark run -a memstate
 
 # Head-to-head comparison
@@ -195,9 +195,60 @@ npx memory-benchmark run -a memstate --agents-md ./AGENTS.md
 # Verbose mode (see every tool call)
 npx memory-benchmark run -a memstate -v
 
-# List available scenarios and presets
+# List available scenarios, presets, and providers
 npx memory-benchmark list
 ```
+
+### Using Different LLM Providers
+
+The agent model and judge model are independently configurable. You can mix providers.
+
+```bash
+# Use GPT-4o as the agent
+OPENAI_API_KEY=key npx memory-benchmark run -a memstate \
+  -m gpt-4o --agent-provider openai
+
+# Use Gemini as the agent, Claude Haiku as the judge
+GEMINI_API_KEY=key npx memory-benchmark run -a memstate \
+  -m gemini-2.0-flash --agent-provider gemini --agent-api-key $GEMINI_API_KEY
+
+# Use Claude Opus as the agent, GPT-4o-mini as the judge
+OPENAI_API_KEY=key npx memory-benchmark run -a memstate \
+  -m claude-opus-4-20250514 --agent-provider anthropic \
+  --judge-model gpt-4o-mini --judge-provider openai
+
+# Use Qwen as the agent
+DASHSCOPE_API_KEY=key npx memory-benchmark run -a memstate \
+  -m qwen-plus --agent-provider qwen --agent-api-key $DASHSCOPE_API_KEY
+
+# Use Deepseek as the agent
+DEEPSEEK_API_KEY=key npx memory-benchmark run -a memstate \
+  -m deepseek-chat --agent-provider deepseek --agent-api-key $DEEPSEEK_API_KEY
+
+# Use a local Ollama model
+npx memory-benchmark run -a memstate \
+  -m llama3.1:70b --agent-provider ollama \
+  --judge-model llama3.1:70b --judge-provider ollama
+
+# Use any OpenAI-compatible endpoint by passing a URL directly
+npx memory-benchmark run -a memstate \
+  -m my-model --agent-provider https://my-server.com/v1 --agent-api-key $MY_KEY
+```
+
+### Supported Providers
+
+| Provider | Flag | Default Base URL | Example Models |
+|---|---|---|---|
+| Anthropic | `anthropic` | Native SDK | claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-5-20251001 |
+| OpenAI | `openai` | api.openai.com | gpt-4o, gpt-4o-mini, o1, o3 |
+| Google Gemini | `gemini` | generativelanguage.googleapis.com | gemini-2.0-flash, gemini-2.5-pro |
+| Qwen | `qwen` | dashscope.aliyuncs.com | qwen-plus, qwen-max, qwen2.5-72b-instruct |
+| Deepseek | `deepseek` | api.deepseek.com | deepseek-chat, deepseek-reasoner |
+| Groq | `groq` | api.groq.com | llama-3.1-70b, mixtral-8x7b |
+| Together | `together` | api.together.xyz | meta-llama/Llama-3-70b |
+| Fireworks | `fireworks` | api.fireworks.ai | accounts/fireworks/models/llama-v3p1-70b |
+| Ollama | `ollama` | localhost:11434 | llama3.1:70b, qwen2.5:32b |
+| Custom URL | `https://...` | (your URL) | (any model) |
 
 ### Custom Adapter
 

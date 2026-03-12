@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import {
   SessionMetrics,
   VerificationResult,
@@ -11,30 +10,24 @@ import {
   AgentConfig,
   ComparisonResult,
   ComparisonRow,
+  LLMProviderConfig,
 } from "../types";
+import { createLLMProvider } from "../agents/llm-provider";
 
 /**
  * Semantic Similarity Scorer
  *
- * Uses Claude to judge semantic similarity between expected and actual answers.
- * This is critical for fairness: we don't do exact string matching because
- * different memory systems may phrase answers differently.
+ * Uses a configurable LLM judge to score semantic similarity between
+ * expected and actual answers. The judge model can be any supported provider.
  *
- * The judge model is given ONLY the question, expected answer, and actual answer.
+ * Default: Claude Haiku (fast, cheap, consistent)
+ * Configurable to: GPT-4o-mini, Gemini Flash, Qwen, etc.
+ *
+ * The judge is given ONLY the question, expected answer, and actual answer.
  * It does NOT know which memory system produced the answer.
  */
-export async function scoreSimilarity(
-  question: string,
-  expectedAnswer: string,
-  actualAnswer: string
-): Promise<number> {
-  const anthropic = new Anthropic();
 
-  const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 100,
-    temperature: 0,
-    system: `You are a strict grading judge. Score semantic similarity between an expected answer and an actual answer on a scale of 0.0 to 1.0.
+const JUDGE_SYSTEM_PROMPT = `You are a strict grading judge. Score semantic similarity between an expected answer and an actual answer on a scale of 0.0 to 1.0.
 
 Rules:
 - 1.0 = semantically identical (same meaning, possibly different wording)
@@ -45,7 +38,39 @@ Rules:
 
 CRITICAL: If the actual answer reports OUTDATED/SUPERSEDED information as current, score it LOW (0.0-0.3) even if the outdated info was once correct.
 
-Respond with ONLY a decimal number between 0.0 and 1.0. Nothing else.`,
+Respond with ONLY a decimal number between 0.0 and 1.0. Nothing else.`;
+
+export interface JudgeConfig {
+  model: string;
+  provider: LLMProviderConfig;
+}
+
+/** Default judge uses Claude Haiku */
+const DEFAULT_JUDGE: JudgeConfig = {
+  model: "claude-haiku-4-5-20251001",
+  provider: { provider: "anthropic" },
+};
+
+let _judgeConfig: JudgeConfig = DEFAULT_JUDGE;
+
+/** Set the judge configuration. Call before running scoring. */
+export function setJudgeConfig(config: JudgeConfig): void {
+  _judgeConfig = config;
+}
+
+export async function scoreSimilarity(
+  question: string,
+  expectedAnswer: string,
+  actualAnswer: string
+): Promise<number> {
+  const provider = createLLMProvider(_judgeConfig.provider);
+
+  const response = await provider.chat({
+    model: _judgeConfig.model,
+    maxTokens: 100,
+    temperature: 0,
+    system: JUDGE_SYSTEM_PROMPT,
+    tools: [],
     messages: [
       {
         role: "user",
@@ -54,8 +79,10 @@ Respond with ONLY a decimal number between 0.0 and 1.0. Nothing else.`,
     ],
   });
 
-  const text = (response.content[0] as Anthropic.TextBlock).text.trim();
-  const score = parseFloat(text);
+  const text = response.text.trim();
+  // Extract first decimal number from response
+  const match = text.match(/([01]\.?\d*)/);
+  const score = match ? parseFloat(match[1]) : 0.0;
   return isNaN(score) ? 0.0 : Math.max(0, Math.min(1, score));
 }
 

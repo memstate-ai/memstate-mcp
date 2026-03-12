@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { runBenchmark } from "./runner";
 import { ALL_SCENARIOS } from "./scenarios";
 import { listPresets } from "./adapters";
-import { BenchmarkOptions } from "./types";
+import { BenchmarkOptions, LLMProviderConfig, PROVIDER_PRESETS } from "./types";
 
 const program = new Command();
 
@@ -16,7 +16,9 @@ program
     "  - Fact recall accuracy\n" +
     "  - Conflict/contradiction detection\n" +
     "  - Cross-session context continuity\n" +
-    "  - Token efficiency"
+    "  - Token efficiency\n\n" +
+    "Supports multiple LLM providers for both agent and judge:\n" +
+    "  anthropic, openai, gemini, qwen, deepseek, groq, together, fireworks, ollama"
   )
   .version("1.0.0");
 
@@ -33,11 +35,37 @@ program
     "Scenario IDs to run (omit for all)",
     []
   )
+  // Agent model options
   .option(
     "-m, --model <model>",
-    "Claude model to use for the agent",
+    "Model for the agent (e.g., claude-sonnet-4-20250514, gpt-4o, gemini-2.0-flash)",
     "claude-sonnet-4-20250514"
   )
+  .option(
+    "--agent-provider <provider>",
+    "LLM provider for agent: anthropic, openai, gemini, qwen, deepseek, groq, together, fireworks, ollama, or a base URL",
+    "anthropic"
+  )
+  .option(
+    "--agent-api-key <key>",
+    "API key for the agent provider (falls back to env vars)"
+  )
+  // Judge model options
+  .option(
+    "--judge-model <model>",
+    "Model for the judge/scorer (e.g., claude-haiku-4-5-20251001, gpt-4o-mini)",
+    "claude-haiku-4-5-20251001"
+  )
+  .option(
+    "--judge-provider <provider>",
+    "LLM provider for judge: anthropic, openai, gemini, qwen, deepseek, groq, together, fireworks, ollama, or a base URL",
+    "anthropic"
+  )
+  .option(
+    "--judge-api-key <key>",
+    "API key for the judge provider (falls back to env vars)"
+  )
+  // Other options
   .option(
     "-r, --runs <number>",
     "Number of runs for statistical significance",
@@ -59,10 +87,16 @@ program
   )
   .option("-v, --verbose", "Verbose logging", false)
   .action(async (opts) => {
+    const agentProvider = resolveProvider(opts.agentProvider, opts.agentApiKey);
+    const judgeProvider = resolveProvider(opts.judgeProvider, opts.judgeApiKey);
+
     const options: BenchmarkOptions = {
       adapters: opts.adapters,
       scenarios: opts.scenarios,
       model: opts.model,
+      agentProvider,
+      judgeModel: opts.judgeModel,
+      judgeProvider,
       runs: parseInt(opts.runs, 10),
       outputDir: opts.output,
       agentsMdPath: opts.agentsMd,
@@ -85,7 +119,7 @@ program
 
 program
   .command("list")
-  .description("List available scenarios and adapter presets")
+  .description("List available scenarios, adapter presets, and LLM providers")
   .action(() => {
     console.log("\nAvailable Scenarios:");
     console.log("─".repeat(60));
@@ -105,6 +139,16 @@ program
     }
     console.log(
       "\n  Custom adapters: place a <name>-adapter.json in the output directory."
+    );
+
+    console.log("\n\nLLM Provider Presets:");
+    console.log("─".repeat(60));
+    for (const [name, config] of Object.entries(PROVIDER_PRESETS)) {
+      const url = config.baseUrl || "(native SDK)";
+      console.log(`  ${name.padEnd(14)} ${config.provider.padEnd(20)} ${url}`);
+    }
+    console.log(
+      "\n  Custom: pass a base URL directly (e.g., --agent-provider https://my-server.com/v1)"
     );
     console.log();
   });
@@ -131,5 +175,32 @@ program
     fs.writeFileSync("comparison-results.md", markdown);
     console.log("Markdown report saved to: comparison-results.md");
   });
+
+/**
+ * Resolve a provider string to an LLMProviderConfig.
+ * Accepts:
+ *   - A preset name: "anthropic", "openai", "gemini", "qwen", etc.
+ *   - A base URL: "https://api.example.com/v1" → treated as openai-compatible
+ */
+function resolveProvider(providerStr: string, apiKey?: string): LLMProviderConfig {
+  // Check presets
+  const preset = PROVIDER_PRESETS[providerStr.toLowerCase()];
+  if (preset) {
+    return { ...preset, ...(apiKey ? { apiKey } : {}) };
+  }
+
+  // If it looks like a URL, treat as openai-compatible
+  if (providerStr.startsWith("http://") || providerStr.startsWith("https://")) {
+    return {
+      provider: "openai-compatible",
+      baseUrl: providerStr,
+      ...(apiKey ? { apiKey } : {}),
+    };
+  }
+
+  // Default: treat as anthropic
+  console.warn(`Unknown provider "${providerStr}", defaulting to anthropic`);
+  return { provider: "anthropic", ...(apiKey ? { apiKey } : {}) };
+}
 
 program.parse();

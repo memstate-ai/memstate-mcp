@@ -114,8 +114,10 @@ export interface ToolCallResult {
 // ─── Agent Loop ──────────────────────────────────────────────────────────────
 
 export interface AgentConfig {
-  /** Model to use for the agent (e.g., "claude-sonnet-4-20250514") */
+  /** Model to use for the agent (e.g., "claude-sonnet-4-20250514", "gpt-4o", "gemini-2.0-flash") */
   model: string;
+  /** LLM provider configuration */
+  provider: LLMProviderConfig;
   /** Max tokens per agent turn */
   maxTokens: number;
   /** Max iterations in the agent loop per session */
@@ -123,6 +125,70 @@ export interface AgentConfig {
   /** Temperature (should be 0 for reproducibility) */
   temperature: number;
 }
+
+// ─── LLM Provider Configuration ─────────────────────────────────────────────
+
+export type LLMProviderType = "anthropic" | "openai-compatible";
+
+export interface LLMProviderConfig {
+  /** Provider type */
+  provider: LLMProviderType;
+  /** API key (falls back to env vars: ANTHROPIC_API_KEY, OPENAI_API_KEY) */
+  apiKey?: string;
+  /** Base URL override (for Gemini, Qwen, local models, etc.) */
+  baseUrl?: string;
+}
+
+/**
+ * Well-known provider presets for common LLM services.
+ * Use these with --agent-provider or --judge-provider flags.
+ *
+ * Examples:
+ *   anthropic          → Claude models (Opus, Sonnet, Haiku)
+ *   openai             → OpenAI models (GPT-4o, o1, o3)
+ *   gemini             → Google Gemini via OpenAI-compatible endpoint
+ *   qwen               → Alibaba Qwen via DashScope
+ *   deepseek           → Deepseek models
+ *   ollama             → Local models via Ollama
+ *   custom:<base_url>  → Any OpenAI-compatible endpoint
+ */
+export const PROVIDER_PRESETS: Record<string, LLMProviderConfig> = {
+  anthropic: {
+    provider: "anthropic",
+  },
+  openai: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.openai.com/v1",
+  },
+  gemini: {
+    provider: "openai-compatible",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+  },
+  qwen: {
+    provider: "openai-compatible",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  },
+  deepseek: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.deepseek.com/v1",
+  },
+  groq: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.groq.com/openai/v1",
+  },
+  together: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.together.xyz/v1",
+  },
+  fireworks: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.fireworks.ai/inference/v1",
+  },
+  ollama: {
+    provider: "openai-compatible",
+    baseUrl: "http://localhost:11434/v1",
+  },
+};
 
 export interface AgentTurn {
   turnNumber: number;
@@ -249,8 +315,14 @@ export interface BenchmarkOptions {
   adapters: string[];
   /** Scenario IDs to run (empty = all) */
   scenarios: string[];
-  /** Agent model */
+  /** Agent model (e.g., "claude-sonnet-4-20250514", "gpt-4o", "gemini-2.0-flash") */
   model: string;
+  /** Agent LLM provider config */
+  agentProvider: LLMProviderConfig;
+  /** Judge model for scoring (e.g., "claude-haiku-4-5-20251001", "gpt-4o-mini") */
+  judgeModel: string;
+  /** Judge LLM provider config */
+  judgeProvider: LLMProviderConfig;
   /** Number of runs for statistical significance */
   runs: number;
   /** Output directory for results */

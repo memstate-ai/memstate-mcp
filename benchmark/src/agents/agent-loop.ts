@@ -5,27 +5,30 @@ import {
   AgentToolCall,
   TokenUsage,
   MemoryAdapter,
+  LLMProviderConfig,
 } from "../types";
+import { createLLMProvider, LLMProvider } from "./llm-provider";
 
 /**
- * Agent Loop — drives a Claude-based coding agent through benchmark sessions.
+ * Agent Loop — drives an LLM-based coding agent through benchmark sessions.
  *
  * WHY NOT LANGCHAIN:
  * We use a raw agent loop (ReAct pattern) instead of LangChain to eliminate
  * framework bias. LangChain's tool-calling abstractions add their own prompt
  * engineering that could favor or penalize certain memory systems. By using
- * the raw Anthropic SDK, the only variables are:
+ * raw LLM APIs, the only variables are:
  *   1. The system prompt (identical across runs)
  *   2. The user prompt (defined by the scenario)
  *   3. The memory tools (provided by the MCP adapter)
  *
  * This ensures the benchmark measures the MEMORY SYSTEM, not the framework.
  *
- * AGENT LOOP DESIGN:
- * 1. Agent receives a task prompt
- * 2. Agent can call memory tools (store, get, search, history)
- * 3. Agent decides when it's done (sends final text response)
- * 4. All tool calls, tokens, and latencies are recorded
+ * MULTI-PROVIDER SUPPORT:
+ * The agent loop supports any LLM via the LLMProvider abstraction:
+ *   - Anthropic (Claude Opus, Sonnet, Haiku)
+ *   - OpenAI-compatible (GPT-4, Gemini via OpenAI compat, Qwen, local models)
+ *
+ * All providers are normalized to a common tool-calling interface.
  */
 
 export interface AgentLoopOptions {
@@ -45,15 +48,26 @@ export interface AgentLoopResult {
   errors: string[];
 }
 
+/** Tool definition in a provider-agnostic format */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, { type: string; description: string }>;
+    required: string[];
+  };
+}
+
 /** Build the tool definitions that the agent can use */
-function buildToolDefinitions(): Anthropic.Tool[] {
+function buildToolDefinitions(): ToolDefinition[] {
   return [
     {
       name: "memory_store",
       description:
         "Store a fact in the project's memory. Use structured keypaths like 'project/category/item'.",
-      input_schema: {
-        type: "object" as const,
+      parameters: {
+        type: "object",
         properties: {
           key: {
             type: "string",
@@ -71,8 +85,8 @@ function buildToolDefinitions(): Anthropic.Tool[] {
       name: "memory_get",
       description:
         "Retrieve a fact or browse memory. Use a keypath to get a specific fact, or a partial path to browse a subtree.",
-      input_schema: {
-        type: "object" as const,
+      parameters: {
+        type: "object",
         properties: {
           key: {
             type: "string",
@@ -86,8 +100,8 @@ function buildToolDefinitions(): Anthropic.Tool[] {
       name: "memory_search",
       description:
         "Search memory by meaning. Use natural language to find relevant facts.",
-      input_schema: {
-        type: "object" as const,
+      parameters: {
+        type: "object",
         properties: {
           query: {
             type: "string",
@@ -101,8 +115,8 @@ function buildToolDefinitions(): Anthropic.Tool[] {
       name: "memory_history",
       description:
         "View the version history of a specific keypath to see how a decision changed over time.",
-      input_schema: {
-        type: "object" as const,
+      parameters: {
+        type: "object",
         properties: {
           key: {
             type: "string",
@@ -120,7 +134,7 @@ export async function runAgentLoop(
   options: AgentLoopOptions
 ): Promise<AgentLoopResult> {
   const { config, adapter, systemPrompt, projectName, verbose } = options;
-  const anthropic = new Anthropic();
+  const provider = createLLMProvider(config.provider);
   const tools = buildToolDefinitions();
   const turns: AgentTurn[] = [];
   const memoryToolCalls: AgentToolCall[] = [];
@@ -128,8 +142,8 @@ export async function runAgentLoop(
   const totalTokens: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   const loopStart = Date.now();
 
-  // Build conversation messages
-  const messages: Anthropic.MessageParam[] = [
+  // Conversation history in provider-agnostic format
+  const messages: Array<{ role: "user" | "assistant" | "tool"; content: string; toolCallId?: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }> = [
     { role: "user", content: userPrompt },
   ];
 
@@ -137,9 +151,9 @@ export async function runAgentLoop(
     const turnStart = Date.now();
 
     try {
-      const response = await anthropic.messages.create({
+      const response = await provider.chat({
         model: config.model,
-        max_tokens: config.maxTokens,
+        maxTokens: config.maxTokens,
         temperature: config.temperature,
         system: systemPrompt,
         tools,
@@ -148,28 +162,20 @@ export async function runAgentLoop(
 
       const turnLatency = Date.now() - turnStart;
       const turnTokens: TokenUsage = {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-        totalTokens: response.usage.input_tokens + response.usage.output_tokens,
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        totalTokens: response.usage.inputTokens + response.usage.outputTokens,
       };
       totalTokens.inputTokens += turnTokens.inputTokens;
       totalTokens.outputTokens += turnTokens.outputTokens;
       totalTokens.totalTokens += turnTokens.totalTokens;
 
-      // Check if the agent is done (end_turn with no tool calls)
-      const hasToolUse = response.content.some((b) => b.type === "tool_use");
-
-      if (response.stop_reason === "end_turn" && !hasToolUse) {
-        // Agent is done — extract final text
-        const textBlocks = response.content.filter((b) => b.type === "text");
-        const finalResponse = textBlocks
-          .map((b) => (b as Anthropic.TextBlock).text)
-          .join("\n");
-
+      // Check if the agent is done (no tool calls)
+      if (!response.toolCalls || response.toolCalls.length === 0) {
         turns.push({
           turnNumber: iteration + 1,
           role: "assistant",
-          content: finalResponse,
+          content: response.text,
           tokenUsage: turnTokens,
           latencyMs: turnLatency,
         });
@@ -180,7 +186,7 @@ export async function runAgentLoop(
 
         return {
           turns,
-          finalResponse,
+          finalResponse: response.text,
           totalTokens,
           totalTimeMs: Date.now() - loopStart,
           memoryToolCalls,
@@ -189,29 +195,28 @@ export async function runAgentLoop(
       }
 
       // Process tool calls
-      const toolUseBlocks = response.content.filter(
-        (b) => b.type === "tool_use"
-      ) as Anthropic.ToolUseBlock[];
-      const textBlocks = response.content.filter(
-        (b) => b.type === "text"
-      ) as Anthropic.TextBlock[];
-
       const turnToolCalls: AgentToolCall[] = [];
 
-      // Add assistant message to conversation
-      messages.push({ role: "assistant", content: response.content });
+      // Add assistant message with tool calls to conversation
+      messages.push({
+        role: "assistant",
+        content: response.text,
+        toolCalls: response.toolCalls.map((tc) => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: JSON.stringify(tc.arguments),
+        })),
+      });
 
-      // Execute each tool call
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const toolUse of toolUseBlocks) {
-        const input = toolUse.input as Record<string, string>;
+      // Execute each tool call and add results
+      for (const toolCall of response.toolCalls) {
+        const input = toolCall.arguments as Record<string, string>;
         const toolStart = Date.now();
         let output: string;
 
         try {
           let result;
-          switch (toolUse.name) {
+          switch (toolCall.name) {
             case "memory_store":
               result = await adapter.storeFact(projectName, input.key, input.value);
               output = result.rawResponse || JSON.stringify(result.data);
@@ -229,44 +234,42 @@ export async function runAgentLoop(
               output = result.rawResponse || JSON.stringify(result.data);
               break;
             default:
-              output = `Unknown tool: ${toolUse.name}`;
+              output = `Unknown tool: ${toolCall.name}`;
           }
         } catch (err) {
           output = `Error: ${err instanceof Error ? err.message : String(err)}`;
-          errors.push(`Tool ${toolUse.name}: ${output}`);
+          errors.push(`Tool ${toolCall.name}: ${output}`);
         }
 
         const toolLatency = Date.now() - toolStart;
-        const toolCall: AgentToolCall = {
-          toolName: toolUse.name,
-          input: toolUse.input as Record<string, unknown>,
+        const agentToolCall: AgentToolCall = {
+          toolName: toolCall.name,
+          input: toolCall.arguments,
           output,
           latencyMs: toolLatency,
           tokenCount: Math.ceil(output.length / 4),
         };
-        turnToolCalls.push(toolCall);
-        memoryToolCalls.push(toolCall);
+        turnToolCalls.push(agentToolCall);
+        memoryToolCalls.push(agentToolCall);
 
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: toolUse.id,
+        // Add tool result to conversation
+        messages.push({
+          role: "tool",
           content: output,
+          toolCallId: toolCall.id,
         });
 
         if (verbose) {
           console.log(
-            `  [Turn ${iteration + 1}] ${toolUse.name}(${JSON.stringify(input)}) → ${output.substring(0, 100)}...`
+            `  [Turn ${iteration + 1}] ${toolCall.name}(${JSON.stringify(input)}) → ${output.substring(0, 100)}...`
           );
         }
       }
 
-      // Add tool results to conversation
-      messages.push({ role: "user", content: toolResults });
-
       turns.push({
         turnNumber: iteration + 1,
         role: "assistant",
-        content: textBlocks.map((b) => b.text).join("\n"),
+        content: response.text,
         toolCalls: turnToolCalls,
         tokenUsage: turnTokens,
         latencyMs: turnLatency,
@@ -279,7 +282,6 @@ export async function runAgentLoop(
         console.error(`  [Turn ${iteration + 1}] ERROR: ${errMsg}`);
       }
 
-      // If we get an API error, don't keep looping
       return {
         turns,
         finalResponse: `Error: ${errMsg}`,
