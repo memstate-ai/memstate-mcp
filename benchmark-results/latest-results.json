@@ -1,11 +1,17 @@
 {
-  "timestamp": "2026-03-12T05:08:50.731Z",
+  "timestamp": "2026-03-12T05:55:13.538Z",
   "adapters": [
     {
       "name": "Memstate",
-      "overallScore": 56.78,
-      "jsonFile": "memstate-2026-03-12T05-08-50.json",
-      "mdFile": "memstate-2026-03-12T05-08-50.md"
+      "overallScore": 69.14,
+      "jsonFile": "memstate-2026-03-12T05-55-13.json",
+      "mdFile": "memstate-2026-03-12T05-55-13.md"
+    },
+    {
+      "name": "Mem0",
+      "overallScore": 15.39,
+      "jsonFile": "mem0-2026-03-12T05-55-13.json",
+      "mdFile": "mem0-2026-03-12T05-55-13.md"
     }
   ],
   "winner": "Memstate",
