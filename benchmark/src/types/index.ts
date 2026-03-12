@@ -128,7 +128,7 @@ export interface AgentConfig {
 
 // ─── LLM Provider Configuration ─────────────────────────────────────────────
 
-export type LLMProviderType = "anthropic" | "openai-compatible";
+export type LLMProviderType = "anthropic" | "openai-compatible" | "mock";
 
 export interface LLMProviderConfig {
   /** Provider type */

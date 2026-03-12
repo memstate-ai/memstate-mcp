@@ -10,55 +10,63 @@ When you run the benchmark with `--agents-md ./AGENTS.md`, the contents of
 this file are appended to the agent's system prompt — **identically for all
 memory adapters being tested**. This ensures fairness.
 
-## Why AGENTS.md Matters for Memory Benchmarks
+## Project Name
 
-In real-world usage, coding agents receive custom instructions that affect
-how they interact with memory systems. For example:
+**Use the project name provided in each scenario prompt when storing memories.**
+The project name is embedded in the task prompt (e.g., "TaskFlow", "SecureApp",
+"BlogEngine", "DataHub", "ShopStream"). Use this as the project_id when calling
+memory tools.
 
-- "Always store architecture decisions under `project/architecture/`"
-- "When a decision changes, check the history first"
-- "Use semantic search before storing to avoid duplicates"
+## Memstate MCP - Memory Storage
 
-These instructions can significantly impact memory system performance.
-A memory system that works well with bare prompts might struggle when
-custom instructions change the agent's behavior.
+This project uses Memstate MCP for versioned memory. Keypaths are hierarchical
+(e.g. `project.myapp.database`). Memstate handles versioning and conflict detection.
 
-## Default Instructions (Edit These)
+### Which tool when
 
-The instructions below are defaults that work well for most memory systems.
-Edit them to test how different instruction styles affect results.
+- **memstate_remember** — PREFERRED for markdown, task summaries, meeting notes.
+  Server extracts keypaths and creates structured memories. Use after tasks.
+- **memstate_set** — Only for one keypath = one short value (e.g. config.port, status).
+  Not for summaries.
+- **memstate_get** — Browse project, fetch existing knowledge before tasks.
+- **memstate_search** — Find by meaning when you don't know the keypath.
+- **memstate_history** — View version history of a keypath or memory.
 
-### Memory Storage Conventions
+### Before each task
+
+Check what already exists:
+`memstate_get(project_id="myproject")` or `memstate_search(query="topic", project_id="myproject")`
+
+### After each task
+
+**Preferred — save markdown with remember:**
+```
+memstate_remember(project_id="myproject", content="## Task Summary\n- What was done\n- Key changes\n- Files modified", source="agent")
+```
+
+**Only for a single value:**
+`memstate_set(project_id="myproject", keypath="config.port", value="8080")`
+
+Keypaths are auto-prefixed: `keypath="database"` → `project.myproject.database`.
+Use short project_id: `myapp`, `memstate`, etc.
+
+## Memory Storage Conventions
 
 - Store facts using hierarchical keypaths: `project/category/subcategory/item`
 - Use descriptive values, not just "yes" or "no"
 - When updating a fact, include context about what changed and why
 - Group related facts under common parent keypaths
 
-### Decision Tracking
+## Decision Tracking
 
 - When a decision changes, update the existing keypath (don't create a new one)
 - Before storing a new decision, search memory for existing related decisions
 - If you find a conflict between what's in memory and what's in the current prompt, explicitly acknowledge it
 
-### Retrieval Best Practices
+## Retrieval Best Practices
 
 - When asked to summarize the current state, browse the full project tree first
 - Use search for open-ended questions
 - Use get for specific keypaths you already know
 - Use history to understand how decisions evolved
 - Always distinguish between current and historical facts in your response
-
-## Scenario-Specific Notes
-
-You can add scenario-specific instructions here to test edge cases:
-
-```
-# Uncomment to test aggressive memory usage:
-# Always search memory before every response.
-# Store every fact mentioned in every prompt, even if it seems minor.
-
-# Uncomment to test minimal memory usage:
-# Only store facts that are explicitly asked to be stored.
-# Only retrieve from memory when explicitly asked.
-```

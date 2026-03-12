@@ -8,7 +8,7 @@ import {
   ComparisonResult,
   MemoryAdapter,
 } from "./types";
-import { MCPMemoryAdapter, getPreset, MCPAdapterConfig } from "./adapters";
+import { MCPMemoryAdapter, getPreset, MCPAdapterConfig, MockMemoryAdapter } from "./adapters";
 import { ALL_SCENARIOS, getScenarioById } from "./scenarios";
 import {
   runAgentLoop,
@@ -238,7 +238,12 @@ function selectScenarios(ids: string[]): BenchmarkScenario[] {
 function createAdapter(
   name: string,
   options: BenchmarkOptions
-): MCPMemoryAdapter | null {
+): MemoryAdapter | null {
+  // Built-in mock adapter for testing the pipeline
+  if (name.toLowerCase() === "mock") {
+    return new MockMemoryAdapter();
+  }
+
   // Check presets
   const preset = getPreset(name);
   if (preset) {

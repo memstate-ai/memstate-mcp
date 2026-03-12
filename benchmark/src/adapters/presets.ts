@@ -22,7 +22,7 @@ export const ADAPTER_PRESETS: Record<string, MCPAdapterConfig> = {
       deleteProject: "memstate_delete_project",
     },
     paramMapping: {
-      project: "project",
+      project: "project_id",
       key: "keypath",
       value: "value",
       query: "query",

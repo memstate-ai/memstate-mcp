@@ -183,6 +183,11 @@ program
  *   - A base URL: "https://api.example.com/v1" → treated as openai-compatible
  */
 function resolveProvider(providerStr: string, apiKey?: string): LLMProviderConfig {
+  // Mock provider for pipeline testing
+  if (providerStr.toLowerCase() === "mock") {
+    return { provider: "mock" };
+  }
+
   // Check presets
   const preset = PROVIDER_PRESETS[providerStr.toLowerCase()];
   if (preset) {

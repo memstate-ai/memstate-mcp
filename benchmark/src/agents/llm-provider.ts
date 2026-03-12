@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { LLMProviderConfig, resolveApiKey } from "../types";
 import { ToolDefinition } from "./agent-loop";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 
 /**
  * LLM Provider Abstraction
@@ -14,6 +15,29 @@ import { ToolDefinition } from "./agent-loop";
  * pattern needed by the benchmark agent. It does NOT aim to be a general-purpose
  * LLM wrapper.
  */
+
+// ─── Proxy Support ──────────────────────────────────────────────────────────
+
+function getProxyUrl(): string | undefined {
+  return process.env.HTTPS_PROXY || process.env.https_proxy ||
+         process.env.HTTP_PROXY || process.env.http_proxy || undefined;
+}
+
+function createProxyDispatcher(): ProxyAgent | undefined {
+  const proxyUrl = getProxyUrl();
+  if (!proxyUrl) return undefined;
+  return new ProxyAgent(proxyUrl);
+}
+
+/** Proxy-aware fetch — uses undici ProxyAgent when HTTPS_PROXY is set. */
+async function proxyFetch(url: string, init: Record<string, unknown>): Promise<Response> {
+  const dispatcher = createProxyDispatcher();
+  if (dispatcher) {
+    // undici fetch with proxy dispatcher
+    return undiciFetch(url, { ...init, dispatcher } as any) as unknown as Response;
+  }
+  return fetch(url, init as any);
+}
 
 // ─── Common Types ────────────────────────────────────────────────────────────
 
@@ -59,6 +83,8 @@ export function createLLMProvider(config: LLMProviderConfig): LLMProvider {
       return new AnthropicProvider(config);
     case "openai-compatible":
       return new OpenAICompatibleProvider(config);
+    case "mock":
+      return new MockLLMProvider();
     default:
       throw new Error(`Unknown LLM provider: ${config.provider}`);
   }
@@ -72,9 +98,12 @@ class AnthropicProvider implements LLMProvider {
 
   constructor(config: LLMProviderConfig) {
     const apiKey = resolveApiKey(config);
+    const proxyUrl = getProxyUrl();
     this.client = new Anthropic({
       ...(apiKey ? { apiKey } : {}),
       ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+      // Anthropic SDK uses undici internally; pass proxy fetch if needed
+      ...(proxyUrl ? { fetch: (url: string, init: any) => proxyFetch(url, init) } : {}),
     });
   }
 
@@ -211,7 +240,7 @@ class OpenAICompatibleProvider implements LLMProvider {
       messages,
     };
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await proxyFetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -311,4 +340,76 @@ interface OpenAIResponse {
     prompt_tokens: number;
     completion_tokens: number;
   };
+}
+
+// ─── Mock LLM Provider (for pipeline testing) ──────────────────────────────
+
+/**
+ * A mock LLM provider for testing the benchmark pipeline without API calls.
+ * Simulates a basic agent that stores and retrieves facts, and a judge
+ * that returns high similarity scores.
+ */
+class MockLLMProvider implements LLMProvider {
+  name = "mock";
+  private callCount = 0;
+
+  async chat(request: ChatRequest): Promise<ChatResponse> {
+    this.callCount++;
+    const lastMsg = request.messages[request.messages.length - 1];
+
+    // Judge mode: return a similarity score
+    if (request.system.includes("grading judge")) {
+      return {
+        text: "0.85",
+        toolCalls: [],
+        usage: { inputTokens: 100, outputTokens: 10 },
+      };
+    }
+
+    // Verification prompt mode: respond with stored facts
+    if (lastMsg.content.includes("Answer the following question")) {
+      // First call for verification: search memory
+      if (lastMsg.role === "user") {
+        return {
+          text: "",
+          toolCalls: [{
+            id: `mock-tc-${this.callCount}`,
+            name: "memory_search",
+            arguments: { query: lastMsg.content.substring(0, 100) },
+          }],
+          usage: { inputTokens: 200, outputTokens: 50 },
+        };
+      }
+    }
+
+    // If we just got tool results back, produce a text summary
+    if (lastMsg.role === "tool") {
+      return {
+        text: `Based on the project memory, here is what I found: ${lastMsg.content.substring(0, 200)}`,
+        toolCalls: [],
+        usage: { inputTokens: 200, outputTokens: 100 },
+      };
+    }
+
+    // Agent session mode: store some facts then respond
+    if (this.callCount % 3 === 1 && request.tools.length > 0) {
+      // First turn: store a fact
+      return {
+        text: "I'll store the key decisions from this session.",
+        toolCalls: [{
+          id: `mock-tc-${this.callCount}`,
+          name: "memory_store",
+          arguments: { key: "decisions/latest", value: "Decision recorded from session" },
+        }],
+        usage: { inputTokens: 300, outputTokens: 80 },
+      };
+    }
+
+    // Default: respond with text
+    return {
+      text: "I have completed the task and stored all relevant information in memory.",
+      toolCalls: [],
+      usage: { inputTokens: 200, outputTokens: 50 },
+    };
+  }
 }
