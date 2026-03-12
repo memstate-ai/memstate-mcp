@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-03-12T05:08:50.731Z",
+  "adapters": [
+    {
+      "name": "Memstate",
+      "overallScore": 56.78,
+      "jsonFile": "memstate-2026-03-12T05-08-50.json",
+      "mdFile": "memstate-2026-03-12T05-08-50.md"
+    }
+  ],
+  "winner": "Memstate",
+  "agentModel": "anthropic/claude-sonnet-4.6",
+  "agentProvider": "openai-compatible"
+}
