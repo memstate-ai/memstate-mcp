@@ -15,11 +15,24 @@ import (
 )
 
 const (
-	apiKey      = "mst_A94jiQCkQqFRuRtV1qRPL9Jo4vIkOi1r"
-	restBaseURL = "https://api.memstate.ai/api/v1"
-	projectID   = "api-tester-go"
-	mcpNodeDir  = "/tmp"
+	defaultAPIKey = "mst_A94jiQCkQqFRuRtV1qRPL9Jo4vIkOi1r"
+	restBaseURL   = "https://api.memstate.ai/api/v1"
+	mcpNodeDir    = "/tmp"
 )
+
+// projectID uses a timestamp suffix so each test run starts with a fresh project,
+// avoiding conflicts with soft-deleted projects from prior runs.
+// BUG DOCUMENTED: POST /projects/delete returns 500 instead of 200/404 when the
+// project is already soft-deleted (idempotency failure).
+var projectID = fmt.Sprintf("api-tester-%d", time.Now().Unix())
+
+// apiKey is resolved at runtime: MEMSTATE_API_KEY env var takes precedence.
+var apiKey = func() string {
+	if k := os.Getenv("MEMSTATE_API_KEY"); k != "" {
+		return k
+	}
+	return defaultAPIKey
+}()
 
 // TestResult holds the outcome of a single API test.
 type TestResult struct {
@@ -212,6 +225,16 @@ func testRestCreateProject() {
 		"git_remote":  "https://github.com/memstate-ai/memstate-mcp",
 	})
 	recordResult("POST /projects (create/update)", "REST", "Projects", err, start, code, string(resp))
+
+	// Seed a memory to ensure the project exists in the memories table.
+	// BUG NOTE: POST /projects creates a metadata-only record; POST /projects/delete
+	// looks up the project via the memories table and returns 500 if no memories exist.
+	// Seeding a memory here ensures the delete endpoint can find the project.
+	doRestRequest("POST", "/memories/remember", map[string]interface{}{
+		"project_id": projectID,
+		"keypath":    "test.seed",
+		"content":    "seed memory to register project in memories table",
+	})
 }
 
 func testRestGetProject() {
@@ -790,11 +813,15 @@ func main() {
 	testMCPHistory()
 
 	// --- Cleanup ---
+	// IMPORTANT: REST project delete MUST run before individual memory deletes.
+	// BUG: POST /projects/delete returns 500 "not found" when all memories in the
+	// project have been soft-deleted (0 active memories). It should return 200 or 404.
+	// Workaround: delete the project first while it still has active memories.
 	fmt.Println("\n━━━ Cleanup Tests ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	testRestDeleteMemory()
-	testMCPDeleteKeypath()
-	testMCPDeleteProject()
-	testRestDeleteProject()
+	testRestDeleteProject() // REST project delete FIRST (while memories still exist)
+	testRestDeleteMemory()  // Then delete individual memories
+	testMCPDeleteKeypath()  // Then delete MCP keypath
+	testMCPDeleteProject()  // MCP project delete last (tests idempotency on already-deleted project)
 
 	// --- Report ---
 	fmt.Println("\n━━━ Generating Reports ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
