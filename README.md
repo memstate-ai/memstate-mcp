@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-compatible-blue)](https://modelcontextprotocol.io)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](https://nodejs.org)
+[![memstate-mcp MCP server](https://glama.ai/mcp/servers/memstate-ai/memstate-mcp/badges/score.svg)](https://glama.ai/mcp/servers/memstate-ai/memstate-mcp)
 
 **Versioned memory for AI agents.** Store facts, detect conflicts, and track how decisions change over time — exposed as a hosted MCP server.
 
