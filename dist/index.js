@@ -145,7 +145,24 @@ async function main() {
     await server.connect(stdio);
     process.stderr.write(`memstate MCP ready (${MCP_URL})\n`);
 }
-main().catch((err) => {
+// CLI dispatcher — handles `npx @memstate/mcp setup` and `npx @memstate/mcp init`
+// before falling through to the MCP server for normal agent use.
+async function run() {
+    const command = process.argv[2];
+    if (command === "setup") {
+        const { main: setupMain } = await import("./setup.js");
+        await setupMain();
+        return;
+    }
+    if (command === "init") {
+        const { main: initMain } = await import("./init.js");
+        await initMain();
+        return;
+    }
+    // No subcommand — start the MCP server (normal agent use)
+    await main();
+}
+run().catch((err) => {
     process.stderr.write(`Fatal error: ${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);
 });
