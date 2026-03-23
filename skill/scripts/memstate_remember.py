@@ -10,7 +10,7 @@ API_KEY = os.environ.get("MEMSTATE_API_KEY", "mst_A94jiQCkQqFRuRtV1qRPL9Jo4vIkOi
 BASE_URL = "https://api.memstate.ai/api/v1"
 
 def remember_content(project_id, content, source=None, context=None):
-    url = f"{BASE_URL}/ingest"
+    url = f"{BASE_URL}/memories/remember"
     headers = {
         "X-API-Key": API_KEY,
         "Content-Type": "application/json",
@@ -49,9 +49,9 @@ def remember_content(project_id, content, source=None, context=None):
                     status_result = json.loads(status_resp.read().decode("utf-8"))
                     status = status_result.get("status")
                     
-                    if status in ["completed", "failed", "error"]:
+                    if status in ["complete", "completed", "failed", "error"]:
                         print(json.dumps(status_result, indent=2))
-                        return 0 if status == "completed" else 1
+                        return 0 if status in ["complete", "completed"] else 1
                         
     except urllib.error.HTTPError as e:
         print(f"Error: {e.code} - {e.read().decode('utf-8')}", file=sys.stderr)

@@ -29,7 +29,10 @@ def test(name, script, args, expect_key=None, expect_value=None):
     detail = ""
     if passed and expect_key:
         try:
-            data = json.loads(stdout)
+            json_str = stdout
+            if "Polling for completion..." in stdout:
+                json_str = stdout.split("Polling for completion...")[1].strip()
+            data = json.loads(json_str)
             actual = data.get(expect_key)
             if expect_value is not None and actual != expect_value:
                 passed = False
@@ -146,7 +149,7 @@ def main():
         ["--project", PROJECT_ID,
          "--content", "## Architecture Summary\n- Backend: FastAPI\n- Database: PostgreSQL 16\n- Auth: JWT with httpOnly cookies\n- Deploy: Docker on AWS ECS",
          "--source", "agent"],
-        expect_key="status", expect_value="completed"
+        expect_key="status", expect_value="complete"
     )
 
     # 11. memstate_delete — soft-delete a keypath

@@ -1,0 +1,25 @@
+
+============================================================
+  Memstate AI Skill — End-to-End Test Suite
+  Project: skill-test-1774307170
+============================================================
+
+[92m✅ PASS[0m memstate_set: store a single fact
+[92m✅ PASS[0m memstate_set: update same keypath (supersede)
+[92m✅ PASS[0m memstate_set: store a second fact
+[92m✅ PASS[0m memstate_get: list all projects
+[92m✅ PASS[0m memstate_get: project tree
+[92m✅ PASS[0m memstate_get: subtree with --include-content
+[92m✅ PASS[0m memstate_get: fetch by memory_id
+[92m✅ PASS[0m memstate_search: semantic search
+[92m✅ PASS[0m memstate_history: by keypath
+
+  [Note: memstate_remember polls for job completion, may take ~20s]
+[92m✅ PASS[0m memstate_remember: markdown ingestion
+[92m✅ PASS[0m memstate_delete: soft-delete a keypath
+[92m✅ PASS[0m memstate_delete_project: cleanup test project
+
+============================================================
+  Results: 12/12 passed | 0 failed | 0 skipped
+============================================================
+

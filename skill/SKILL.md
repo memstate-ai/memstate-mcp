@@ -228,7 +228,7 @@ python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_delete_project.py \
 1. **One keypath = one fact.** Use `api.style` not `api`. Be specific.
 2. **Update, don't duplicate.** When a fact changes, call `memstate_set.py` with the SAME keypath and the NEW value. Do not create a new keypath.
 3. **Trust `is_latest: true`.** Search results may show multiple versions. Only trust results where `is_latest` is `true`.
-4. **Use Markdown for summaries.** `memstate_remember.py` excels at parsing Markdown lists, headings, and key-value pairs into structured keypaths.
+4. **Use Markdown for summaries.** `memstate_remember.py` is the recommended API for agents to store memories. It excels at parsing Markdown lists, headings, and key-value pairs into structured keypaths automatically using custom-trained AI models.
 5. **Search before browsing.** `memstate_search.py` is faster than browsing the tree when you know what you're looking for.
 6. **Use categories.** Setting `--category decision` on architecture choices makes them easier to filter later.
 

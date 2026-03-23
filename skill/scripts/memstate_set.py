@@ -9,7 +9,7 @@ API_KEY = os.environ.get("MEMSTATE_API_KEY", "mst_A94jiQCkQqFRuRtV1qRPL9Jo4vIkOi
 BASE_URL = "https://api.memstate.ai/api/v1"
 
 def set_memory(project_id, keypath, value, category=None, topics=None):
-    url = f"{BASE_URL}/memories/remember"
+    url = f"{BASE_URL}/memories/store"
     headers = {
         "X-API-Key": API_KEY,
         "Content-Type": "application/json",
