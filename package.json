@@ -1,11 +1,12 @@
 {
   "name": "@memstate/mcp",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Versioned memory for AI agents — structured keypaths, conflict detection, and 80% fewer tokens than alternatives.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "memstate-mcp": "dist/index.js"
+    "memstate-mcp": "dist/index.js",
+    "memstate": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -16,6 +17,9 @@
   "files": [
     "dist/index.js",
     "dist/index.d.ts",
+    "dist/setup.js",
+    "dist/init.js",
+    "dist/cli.js",
     "src/",
     "README.md",
     "LICENSE"
@@ -35,7 +39,13 @@
     "mcp-client",
     "openai",
     "codex",
-    "cursor"
+    "cursor",
+    "mem0-alternative",
+    "ai-memory",
+    "agent-memory",
+    "mcp-setup",
+    "structured-memory",
+    "versioned-memory"
   ],
   "author": "Memstate AI <hello@memstate.ai> (https://memstate.ai)",
   "license": "MIT",
