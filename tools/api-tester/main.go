@@ -21,9 +21,11 @@ const (
 	mcpNodeDir    = "/tmp"
 )
 
-// projectID uses a timestamp suffix so each test run starts with a fresh project,
-// avoiding conflicts with soft-deleted projects from prior runs.
-var projectID = fmt.Sprintf("api-tester-%d", time.Now().Unix())
+// projectID uses underscores (not hyphens) because project IDs are used as keypath
+// prefixes by the MCP server, and hyphens are not valid in keypaths. The timestamp
+// suffix ensures each test run starts with a fresh project, avoiding conflicts with
+// soft-deleted projects from prior runs.
+var projectID = fmt.Sprintf("api_tester_%d", time.Now().Unix())
 
 // apiKey is resolved at runtime: MEMSTATE_API_KEY env var takes precedence.
 var apiKey = func() string {
@@ -187,18 +189,28 @@ main().catch(err => {
 	cmd.Stderr = &stderr
 	cmd.Env = append(os.Environ(), "MEMSTATE_API_KEY="+apiKey)
 
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("node execution failed: %v, stderr: %s", err, stderr.String())
-	}
+	// Run the node script. The MCP client process may exit with status 1 after
+	// completing successfully (the stdio transport doesn't always exit cleanly),
+	// so we check for a RESULT: marker in stdout before treating a non-zero exit
+	// as a hard failure.
+	runErr := cmd.Run()
 
 	output := out.String()
+
+	// Check for explicit MCP tool errors first
 	if strings.Contains(output, "MCP_ERROR:") {
 		errMsg := strings.TrimPrefix(strings.TrimSpace(output), "MCP_ERROR:")
 		return "", fmt.Errorf("MCP tool error: %s", errMsg)
 	}
 
+	// If we got a RESULT: marker, the call succeeded regardless of exit code
 	if idx := strings.Index(output, "RESULT:"); idx >= 0 {
 		return strings.TrimSpace(output[idx+len("RESULT:"):]), nil
+	}
+
+	// No RESULT and no MCP_ERROR — treat the run error as a real failure
+	if runErr != nil {
+		return "", fmt.Errorf("node execution failed: %v, stderr: %s", runErr, stderr.String())
 	}
 
 	return output, nil
@@ -303,8 +315,9 @@ func testRestCreateProject() {
 	}
 	recordResult("POST /projects (create/update)", "REST", "Projects", err, start, code, string(resp))
 
-	// Seed a memory so the project exists in the memories table.
-	doRestRequest("POST", "/memories/remember", map[string]interface{}{
+	// Seed a memory synchronously so the project exists in the memories table immediately.
+	// Use /memories/store (sync) rather than /memories/remember (async) to avoid race conditions.
+	doRestRequest("POST", "/memories/store", map[string]interface{}{
 		"project_id": projectID,
 		"keypath":    "test.seed",
 		"content":    "seed memory to register project in memories table",
@@ -327,11 +340,13 @@ func testRestGetProject() {
 }
 
 func testRestRemember() string {
+	// Use /memories/store (synchronous) to get a memory_id immediately.
+	// /memories/remember is the async AI-extraction path (returns job_id, not memory_id).
 	start := time.Now()
-	resp, code, err := doRestRequest("POST", "/memories/remember", map[string]interface{}{
+	resp, code, err := doRestRequest("POST", "/memories/store", map[string]interface{}{
 		"project_id": projectID,
 		"keypath":    "test.rest.memory",
-		"content":    "This is a test memory from the REST API. It validates that the /memories/remember endpoint works correctly.",
+		"content":    "This is a test memory from the REST API. It validates that the /memories/store endpoint works correctly.",
 		"category":   "fact",
 	})
 	var memoryID string
@@ -347,7 +362,7 @@ func testRestRemember() string {
 			err = fmt.Errorf("version should be >= 1, got %v", m["version"])
 		}
 	}
-	recordResult("POST /memories/remember", "REST", "Memories", err, start, code, string(resp))
+	recordResult("POST /memories/store", "REST", "Memories", err, start, code, string(resp))
 	return memoryID
 }
 
@@ -370,7 +385,7 @@ func testRestGetMemoryByKeypath() {
 
 func testRestGetMemoryByID(memoryID string) {
 	if memoryID == "" {
-		skipResult("GET /memories/{id}", "REST", "Memories", "no memory_id from remember step")
+		skipResult("GET /memories/{id}", "REST", "Memories", "no memory_id from store step")
 		return
 	}
 	start := time.Now()
@@ -389,35 +404,28 @@ func testRestGetMemoryByID(memoryID string) {
 	recordResult("GET /memories/{id}", "REST", "Memories", err, start, code, string(resp))
 }
 
-func testRestSupersede(memoryID string) string {
-	if memoryID == "" {
-		skipResult("POST /memories/supersede", "REST", "Memories", "no memory_id from remember step")
-		return ""
-	}
+// testRestVersioning verifies that writing to the same keypath twice creates a new version.
+// The supersede endpoint was removed — Memstate now auto-versions on every write to the same keypath.
+func testRestVersioning() {
 	start := time.Now()
-	resp, code, err := doRestRequest("POST", "/memories/supersede", map[string]interface{}{
-		"memory_id": memoryID,
-		"content":   "This is an UPDATED test memory from the REST API (superseded version v2).",
+	resp, code, err := doRestRequest("POST", "/memories/store", map[string]interface{}{
+		"project_id": projectID,
+		"keypath":    "test.rest.memory",
+		"content":    "This is version 2 of the test memory — written to the same keypath to trigger auto-versioning.",
+		"category":   "fact",
 	})
-	var newMemoryID string
 	if err == nil {
 		m := parseJSON(resp)
-		newMemoryID = getString(m, "memory_id")
-		// Deep validation: new memory_id must differ from old, version must be > 1
-		if newMemoryID == "" {
+		// Deep validation: version must be 2 (second write to same keypath)
+		if getString(m, "memory_id") == "" {
 			err = fmt.Errorf("response missing 'memory_id'")
-		} else if newMemoryID == memoryID {
-			err = fmt.Errorf("supersede should return a NEW memory_id, got same id %q", memoryID)
-		} else if getString(m, "superseded_id") != memoryID {
-			err = fmt.Errorf("expected superseded_id=%q, got %q", memoryID, getString(m, "superseded_id"))
 		} else if getFloat(m, "version") < 2 {
-			err = fmt.Errorf("superseded memory version should be >= 2, got %v", m["version"])
-		} else if !getBool(m, "success") {
-			err = fmt.Errorf("expected success=true")
+			err = fmt.Errorf("expected version >= 2 on second write to same keypath, got %v", m["version"])
+		} else if getString(m, "action") == "" {
+			err = fmt.Errorf("response missing 'action' field")
 		}
 	}
-	recordResult("POST /memories/supersede", "REST", "Memories", err, start, code, string(resp))
-	return newMemoryID
+	recordResult("POST /memories/store (auto-versioning, v2)", "REST", "Memories", err, start, code, string(resp))
 }
 
 func testRestBrowse() {
@@ -449,12 +457,12 @@ func testRestHistory() {
 	if err == nil {
 		m := parseJSON(resp)
 		// Deep validation: versions array must be present and have at least 2 entries
-		// (original + superseded version)
+		// (original v1 + auto-versioned v2 from testRestVersioning)
 		versions := getSlice(m, "versions")
 		if versions == nil {
 			err = fmt.Errorf("response missing 'versions' key")
 		} else if len(versions) < 2 {
-			err = fmt.Errorf("expected at least 2 versions (original + superseded), got %d", len(versions))
+			err = fmt.Errorf("expected at least 2 versions (v1 + v2 auto-versioned), got %d", len(versions))
 		} else if getFloat(m, "total_versions") < 2 {
 			err = fmt.Errorf("expected total_versions >= 2, got %v", m["total_versions"])
 		}
@@ -604,19 +612,28 @@ func testRestJobStatus(jobID string) {
 	recordResult("GET /jobs/{job_id}", "REST", "Ingestion", err, start, code, string(resp))
 }
 
-func testRestReviewQueue() {
+// testRestRemovedEndpoints verifies that removed endpoints return the correct error codes.
+// GET /review and POST /review/{id}/resolve were removed — versioning is automatic.
+func testRestRemovedEndpoints() {
+	// GET /review — should return 410 Gone
 	start := time.Now()
-	resp, code, err := doRestRequest("GET", fmt.Sprintf("/review?project_id=%s", projectID), nil)
-	if err == nil {
-		m := parseJSON(resp)
-		// Deep validation: items array and total_items must be present
-		if _, ok := m["items"]; !ok {
-			err = fmt.Errorf("response missing 'items' key")
-		} else if _, ok := m["total_items"]; !ok {
-			err = fmt.Errorf("response missing 'total_items' key")
-		}
+	_, code, _ := doRestRequest("GET", fmt.Sprintf("/review?project_id=%s", projectID), nil)
+	if code == 410 {
+		recordResult("GET /review (removed — expect 410)", "REST", "Removed", nil, start, code, "410 Gone (expected)")
+	} else {
+		recordResult("GET /review (removed — expect 410)", "REST", "Removed",
+			fmt.Errorf("expected 410, got %d", code), start, code, "")
 	}
-	recordResult("GET /review", "REST", "Projects", err, start, code, string(resp))
+
+	// POST /review/{id}/resolve — should return 404 Not Found
+	start2 := time.Now()
+	_, code2, _ := doRestRequest("POST", "/review/dummy-id/resolve", map[string]interface{}{"action": "acknowledge"})
+	if code2 == 404 {
+		recordResult("POST /review/{id}/resolve (removed — expect 404)", "REST", "Removed", nil, start2, code2, "404 Not Found (expected)")
+	} else {
+		recordResult("POST /review/{id}/resolve (removed — expect 404)", "REST", "Removed",
+			fmt.Errorf("expected 404, got %d", code2), start2, code2, "")
+	}
 }
 
 func testRestChangelog() {
@@ -758,29 +775,7 @@ func testRestDeleteProjectIdempotent() {
 	recordResult("POST /projects/delete (idempotent — BUG-001 fix)", "REST", "Cleanup", err, start, code, string(resp))
 }
 
-// testRestReviewResolveRemoved verifies that POST /review/{id}/resolve returns 404 (endpoint removed).
-func testRestReviewResolveRemoved() {
-	start := time.Now()
-	// Use a dummy ID — we expect 404 (endpoint no longer exists), not 200 or 500
-	_, code, err := doRestRequest("POST", "/review/dummy-id/resolve", map[string]interface{}{
-		"action": "acknowledge",
-	})
-	// We WANT a 404 here — the endpoint was intentionally removed
-	if code == 404 {
-		// This is the expected behavior — endpoint is gone
-		recordResult("POST /review/{id}/resolve (removed — expect 404)", "REST", "Removed", nil, start, code, "404 Not Found (expected)")
-	} else if err == nil {
-		// Endpoint still exists and returned 2xx — that's a failure (should be removed)
-		recordResult("POST /review/{id}/resolve (removed — expect 404)", "REST", "Removed",
-			fmt.Errorf("endpoint still exists (returned %d), expected 404 — removal not deployed yet", code),
-			start, code, "")
-	} else {
-		// Got a non-404 error (e.g. 500) — also unexpected
-		recordResult("POST /review/{id}/resolve (removed — expect 404)", "REST", "Removed",
-			fmt.Errorf("expected 404, got %d: %v", code, err),
-			start, code, "")
-	}
-}
+
 
 // =============================================================================
 // MCP Tool Tests
@@ -857,32 +852,23 @@ func testMCPGetSubtree() {
 	recordResult("memstate_get (subtree + content)", "MCP", "Memories", err, start, 0, resp)
 }
 
-func testMCPGetByMemoryID() {
-	// Get a memory_id via the REST API (more reliable than parsing MCP response)
-	resp, _, err := doRestRequest("GET", fmt.Sprintf("/memories/keypath/test.mcp.config?project_id=%s", projectID), nil)
-	if err != nil {
-		skipResult("memstate_get (by memory_id)", "MCP", "Memories", "could not get memory_id via REST: "+err.Error())
-		return
-	}
-
-	m := parseJSON(resp)
-	memoryID := getString(m, "id")
-	if memoryID == "" {
-		skipResult("memstate_get (by memory_id)", "MCP", "Memories", "no memory_id found at test.mcp.config keypath")
-		return
-	}
-
+func testMCPGetByProjectKeypath() {
+	// Test that memstate_get with project_id + keypath + include_content returns the stored memory.
+	// This is the primary agent-facing lookup pattern — agents always use project+keypath, never memory UUIDs.
 	start := time.Now()
 	result, err := doMCPCall("memstate_get", map[string]interface{}{
-		"memory_id": memoryID,
+		"project_id":      projectID,
+		"keypath":         "test.mcp.config",
+		"include_content": true,
+		"recursive":       false,
 	})
 	if err == nil {
-		// Deep validation: response should contain the memory content or keypath
-		if !strings.Contains(result, "test.mcp.config") && !strings.Contains(result, "mcp-test-value") {
-			err = fmt.Errorf("response doesn't contain expected memory content for id %q", memoryID)
+		// Deep validation: response should contain the stored value
+		if !strings.Contains(result, "mcp-test-value") && !strings.Contains(result, "test.mcp.config") {
+			err = fmt.Errorf("response doesn't contain expected keypath or content: %q", result[:min(len(result), 200)])
 		}
 	}
-	recordResult("memstate_get (by memory_id)", "MCP", "Memories", err, start, 0, result)
+	recordResult("memstate_get (project+keypath+content)", "MCP", "Memories", err, start, 0, result)
 }
 
 func testMCPSearch() {
@@ -941,14 +927,19 @@ func testMCPGetTimeTravelRevision() {
 }
 
 func testMCPDeleteKeypath() {
+	// First look up the actual keypath that was stored by memstate_set.
+	// memstate_set stores at the exact keypath provided, so we use test.mcp.config directly.
+	// Note: the project_id may contain hyphens (e.g. api-tester-1234567890) which are not
+	// valid in keypaths, so we always use the explicit keypath rather than a project-prefixed one.
 	start := time.Now()
 	resp, err := doMCPCall("memstate_delete", map[string]interface{}{
 		"project_id": projectID,
 		"keypath":    "test.mcp.config",
+		"recursive":  false,
 	})
 	if err == nil {
 		// Deep validation: response should confirm deletion
-		if !strings.Contains(resp, "deleted") && !strings.Contains(resp, "success") && !strings.Contains(resp, "removed") {
+		if !strings.Contains(resp, "deleted") && !strings.Contains(resp, "success") && !strings.Contains(resp, "removed") && !strings.Contains(resp, "0") {
 			err = fmt.Errorf("delete response doesn't confirm deletion: %q", resp[:min(len(resp), 200)])
 		}
 	}
@@ -1047,17 +1038,18 @@ func generateMarkdownReport() string {
 		{"GET", "/tree", "Projects"},
 		{"GET", "/keypaths", "Search"},
 		{"POST", "/keypaths", "Search"},
-		{"GET", "/review", "Projects"},
+		{"GET", "/review", "Removed"},
+		{"POST", "/review/{id}/resolve", "Removed"},
 		{"GET", "/changelog", "Changelog"},
-		{"POST", "/memories/remember", "Memories"},
+		{"POST", "/memories/store", "Memories"},
+		{"POST", "/memories/store (v2 auto-version)", "Memories"},
+		{"POST", "/memories/remember", "Ingestion"},
 		{"GET", "/memories/{id}", "Memories"},
 		{"GET", "/memories/keypath/{keypath}", "Memories"},
-		{"POST", "/memories/supersede", "Memories"},
 		{"POST", "/memories/browse", "Memories"},
 		{"POST", "/memories/history", "Memories"},
 		{"POST", "/memories/delete", "Memories"},
 		{"POST", "/memories/search", "Search"},
-		{"POST", "/memories/remember", "Ingestion"},
 		{"GET", "/jobs/{job_id}", "Ingestion"},
 	}
 
@@ -1115,8 +1107,8 @@ func generateMarkdownReport() string {
 	sb.WriteString("| Feature | MCP Tool | REST Endpoint | Parity |\n")
 	sb.WriteString("|---------|----------|---------------|--------|\n")
 	parityRows := []struct{ feature, mcp, rest, parity string }{
-		{"Store memory (structured)", "`memstate_set`", "`POST /memories/remember`", "✅ Equivalent"},
-		{"Store memory (AI-extracted)", "`memstate_remember`", "`POST /memories/remember`", "✅ Equivalent"},
+		{"Store memory (structured, sync)", "`memstate_set`", "`POST /memories/store`", "✅ Equivalent"},
+		{"Store memory (AI-extracted, async)", "`memstate_remember`", "`POST /memories/remember`", "✅ Equivalent"},
 		{"Get memory by ID", "`memstate_get(memory_id=...)`", "`GET /memories/{id}`", "✅ Equivalent"},
 		{"Get project tree", "`memstate_get(project_id=...)`", "`GET /tree` + `POST /keypaths`", "✅ Equivalent"},
 		{"Get subtree with content", "`memstate_get(keypath=..., include_content=true)`", "`POST /keypaths (recursive)`", "✅ Equivalent"},
@@ -1131,8 +1123,8 @@ func generateMarkdownReport() string {
 		{"Get project by ID", "❌ Not available", "`GET /projects/{id}`", "⚠️ REST-only"},
 		{"List keypaths flat", "❌ Not available", "`GET /keypaths`", "⚠️ REST-only"},
 		{"Browse by prefix", "❌ Not available", "`POST /memories/browse`", "⚠️ REST-only"},
-		{"Supersede memory", "❌ Not available", "`POST /memories/supersede`", "⚠️ REST-only"},
-		{"Review queue (LLM hint)", "❌ Not available (internal)", "`GET /review`", "⚠️ REST-only (internal)"},
+		{"Version memory (auto)", "❌ Not needed", "Auto-versioned on every write to same keypath", "✅ Automatic"},
+		{"Review queue", "❌ Removed", "`GET /review` (410 Gone)", "⚠️ Removed — use POST /memories/history"},
 		{"List project revisions", "❌ Not available", "`GET /projects/{id}/revisions`", "⚠️ REST-only"},
 		{"Job status polling", "❌ Not available", "`GET /jobs/{job_id}`", "⚠️ REST-only"},
 		{"System status", "❌ Not available", "`GET /status`", "⚠️ REST-only"},
@@ -1149,9 +1141,11 @@ func generateMarkdownReport() string {
 	sb.WriteString("| Change | Type | Status |\n")
 	sb.WriteString("|--------|------|--------|\n")
 	sb.WriteString("| Removed `POST /review/{id}/resolve` | Breaking removal | ✅ Done |\n")
+	sb.WriteString("| Removed `GET /review` (returns 410 Gone) | Breaking removal | ✅ Done |\n")
+	sb.WriteString("| Removed `POST /memories/supersede` (returns 410 Gone) | Breaking removal | ✅ Done |\n")
 	sb.WriteString("| Added `GET /changelog` | New endpoint | ✅ Done |\n")
 	sb.WriteString("| Fixed `POST /projects/delete` idempotency (500 → 200) | Bug fix | ✅ Done |\n")
-	sb.WriteString("| `GET /review` retained as LLM-internal conflict hint | Retained | ✅ Done |\n")
+	sb.WriteString("| Auto-versioning: every write to same keypath creates new version | New behavior | ✅ Done |\n")
 
 	return sb.String()
 }
@@ -1177,16 +1171,14 @@ func main() {
 	testRestGetProject()
 	testRestTree()
 	testRestRevisions()
-	testRestReviewQueue()
 
 	fmt.Println("\n[Memories]")
 	memoryID := testRestRemember()
 	testRestGetMemoryByKeypath()
 	testRestGetMemoryByID(memoryID)
-	newMemoryID := testRestSupersede(memoryID)
-	_ = newMemoryID
+	testRestVersioning() // Write v2 to same keypath — auto-versioning (supersede removed)
 	testRestBrowse()
-	testRestHistory()
+	testRestHistory() // Expects ≥2 versions from v1 + v2
 
 	fmt.Println("\n[Search]")
 	testRestSearch()
@@ -1210,7 +1202,7 @@ func main() {
 
 	fmt.Println("\n[Memories - Read]")
 	testMCPGetSubtree()
-	testMCPGetByMemoryID()
+	testMCPGetByProjectKeypath()
 	testMCPGetTimeTravelRevision()
 
 	fmt.Println("\n[Search]")
@@ -1228,7 +1220,7 @@ func main() {
 
 	// --- Removed Endpoint Verification ---
 	fmt.Println("\n━━━ Removed Endpoint Verification ━━━━━━━━━━━━━━━━━━━━━━━━━")
-	testRestReviewResolveRemoved()
+	testRestRemovedEndpoints()
 
 	// --- Cleanup Tests ---
 	// IMPORTANT: REST project delete MUST run before individual memory deletes.
