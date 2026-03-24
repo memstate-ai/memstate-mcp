@@ -31,7 +31,7 @@ One confirmed bug was discovered during testing (see Section 5).
 | **REST** | Projects | `GET /review` | ✅ PASS | 0.07s |
 | **REST** | Memories | `POST /memories/remember` | ✅ PASS | 0.12s |
 | **REST** | Memories | `GET /memories/keypath/{keypath}` | ✅ PASS | 0.07s |
-| **REST** | Memories | `GET /memories/{id}` | ✅ PASS | 0.07s |
+| **REST** | Memories | `GET /memories/keypath/{keypath}` | ✅ PASS | 0.07s |
 | **REST** | Memories | `POST /memories/supersede` | ✅ PASS | 0.11s |
 | **REST** | Memories | `POST /memories/browse` | ✅ PASS | 0.07s |
 | **REST** | Memories | `POST /memories/history` | ✅ PASS | 0.07s |
@@ -46,7 +46,7 @@ One confirmed bug was discovered during testing (see Section 5).
 | **MCP** | Memories | `memstate_set` | ✅ PASS | 1.72s |
 | **MCP** | Memories | `memstate_remember` | ✅ PASS | 4.69s |
 | **MCP** | Memories | `memstate_get (subtree + content)` | ✅ PASS | 1.31s |
-| **MCP** | Memories | `memstate_get (by memory_id)` | ✅ PASS | 1.44s |
+| **MCP** | Memories | `memstate_get (by project+keypath)` | ✅ PASS | 1.44s |
 | **MCP** | Memories | `memstate_get (time-travel at_revision)` | ✅ PASS | 1.55s |
 | **MCP** | Search | `memstate_search` | ✅ PASS | 1.36s |
 | **MCP** | Search | `memstate_search (with keypath_prefix filter)` | ✅ PASS | 1.43s |
@@ -94,7 +94,7 @@ This section addresses the question: *"Why do the APIs differ, and should they e
 |---------|----------|---------------|--------|
 | Store memory (structured) | `memstate_set` | `POST /memories/remember` | ✅ Equivalent |
 | Store memory (AI-extracted) | `memstate_remember` | `POST /memories/remember` | ✅ Equivalent |
-| Get memory by ID | `memstate_get(memory_id=...)` | `GET /memories/{id}` | ✅ Equivalent |
+| Get memory by project+keypath | `memstate_get(project_id=..., keypath=...)` | `GET /memories/keypath/{keypath}` | ✅ Equivalent |
 | Get project tree | `memstate_get(project_id=...)` | `GET /tree` + `POST /keypaths` | ✅ Equivalent |
 | Get subtree | `memstate_get(keypath=...)` | `POST /keypaths (recursive)` | ✅ Equivalent |
 | Time-travel (at_revision) | `memstate_get(at_revision=...)` | `POST /keypaths (at_revision)` | ✅ Equivalent |
