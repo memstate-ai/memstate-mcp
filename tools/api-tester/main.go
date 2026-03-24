@@ -560,7 +560,7 @@ func testRestTree() {
 
 func testRestIngest() string {
 	start := time.Now()
-	resp, code, err := doRestRequest("POST", "/ingest", map[string]interface{}{
+	resp, code, err := doRestRequest("POST", "/memories/remember", map[string]interface{}{
 		"project_id": projectID,
 		"content":    "# Test Ingestion via REST\n\n## Architecture\nThe test uses Go to call the REST API directly.\n\n## Configuration\n- base_url: https://api.memstate.ai/api/v1\n- auth: X-API-Key header\n- timeout: 30s\n\n## Test Coverage\nThis ingestion tests the AI-powered keypath extraction feature.",
 		"source":     "docs",
@@ -580,13 +580,13 @@ func testRestIngest() string {
 			err = fmt.Errorf("response missing 'job_id' or 'ingestion_id'")
 		}
 	}
-	recordResult("POST /ingest", "REST", "Ingestion", err, start, code, string(resp))
+	recordResult("POST /memories/remember", "REST", "Ingestion", err, start, code, string(resp))
 	return jobID
 }
 
 func testRestJobStatus(jobID string) {
 	if jobID == "" {
-		skipResult("GET /jobs/{job_id}", "REST", "Ingestion", "no job_id from ingest step")
+		skipResult("GET /jobs/{job_id}", "REST", "Ingestion", "no job_id from remember step")
 		return
 	}
 	start := time.Now()
@@ -1057,7 +1057,7 @@ func generateMarkdownReport() string {
 		{"POST", "/memories/history", "Memories"},
 		{"POST", "/memories/delete", "Memories"},
 		{"POST", "/memories/search", "Search"},
-		{"POST", "/ingest", "Ingestion"},
+		{"POST", "/memories/remember", "Ingestion"},
 		{"GET", "/jobs/{job_id}", "Ingestion"},
 	}
 
@@ -1116,7 +1116,7 @@ func generateMarkdownReport() string {
 	sb.WriteString("|---------|----------|---------------|--------|\n")
 	parityRows := []struct{ feature, mcp, rest, parity string }{
 		{"Store memory (structured)", "`memstate_set`", "`POST /memories/remember`", "✅ Equivalent"},
-		{"Store memory (AI-extracted)", "`memstate_remember`", "`POST /ingest`", "✅ Equivalent"},
+		{"Store memory (AI-extracted)", "`memstate_remember`", "`POST /memories/remember`", "✅ Equivalent"},
 		{"Get memory by ID", "`memstate_get(memory_id=...)`", "`GET /memories/{id}`", "✅ Equivalent"},
 		{"Get project tree", "`memstate_get(project_id=...)`", "`GET /tree` + `POST /keypaths`", "✅ Equivalent"},
 		{"Get subtree with content", "`memstate_get(keypath=..., include_content=true)`", "`POST /keypaths (recursive)`", "✅ Equivalent"},

@@ -11,7 +11,7 @@ A comprehensive Go-based test suite that exhaustively validates both the Memstat
 | Projects | `GET /projects`, `POST /projects`, `GET /projects/{id}`, `GET /projects/{id}/revisions`, `POST /projects/delete`, `GET /tree`, `GET /review` |
 | Memories | `POST /memories/remember`, `GET /memories/{id}`, `GET /memories/keypath/{keypath}`, `POST /memories/supersede`, `POST /memories/browse`, `POST /memories/history`, `POST /memories/delete` |
 | Search | `POST /memories/search`, `GET /keypaths`, `POST /keypaths` (recursive + time-travel) |
-| Ingestion | `POST /ingest`, `GET /jobs/{job_id}` |
+| Ingestion | `POST /memories/remember`, `GET /jobs/{job_id}` |
 
 ### MCP Tools (7 tools, 12 test cases)
 | Tool | Test Cases |

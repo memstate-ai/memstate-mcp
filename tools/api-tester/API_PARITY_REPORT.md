@@ -12,7 +12,7 @@
 
 An exhaustive test suite was built in Go to validate every documented endpoint and MCP tool in the Memstate AI platform. The suite executed 33 individual tests against the production environment across two independent accounts.
 
-Both the REST API and MCP tools are highly stable and function exactly as documented. The AI-powered keypath extraction (`memstate_remember` / `POST /ingest`) correctly parses markdown content, conflict detection works, time-travel queries return correct historical state, and semantic search returns relevant results.
+Both the REST API and MCP tools are highly stable and function exactly as documented. The AI-powered keypath extraction (`memstate_remember` / `POST /memories/remember`) correctly parses markdown content, conflict detection works, time-travel queries return correct historical state, and semantic search returns relevant results.
 
 One confirmed bug was discovered during testing (see Section 5).
 
@@ -39,7 +39,7 @@ One confirmed bug was discovered during testing (see Section 5).
 | **REST** | Search | `GET /keypaths` | ✅ PASS | 0.07s |
 | **REST** | Search | `POST /keypaths (recursive)` | ✅ PASS | 0.07s |
 | **REST** | Search | `POST /keypaths (time-travel at_revision)` | ✅ PASS | 0.07s |
-| **REST** | Ingestion | `POST /ingest` | ✅ PASS | 0.07s |
+| **REST** | Ingestion | `POST /memories/remember` | ✅ PASS | 0.07s |
 | **REST** | Ingestion | `GET /jobs/{job_id}` | ✅ PASS | 0.07s |
 | **MCP** | Projects | `memstate_get (list all projects)` | ✅ PASS | 1.73s |
 | **MCP** | Projects | `memstate_get (project tree)` | ✅ PASS | 1.58s |
@@ -79,7 +79,7 @@ One confirmed bug was discovered during testing (see Section 5).
 | `POST` | `/memories/history` | Memories | ✅ |
 | `POST` | `/memories/delete` | Memories | ✅ |
 | `POST` | `/memories/search` | Search | ✅ |
-| `POST` | `/ingest` | Ingestion | ✅ |
+| `POST` | `/memories/remember` | Ingestion | ✅ |
 | `GET` | `/jobs/{job_id}` | Ingestion | ✅ |
 | `GET` | `/review` | Review | ✅ |
 | `POST` | `/review/{id}/resolve` | Review | ⚠️ Not tested (requires a flagged memory) |
@@ -93,7 +93,7 @@ This section addresses the question: *"Why do the APIs differ, and should they e
 | Feature | MCP Tool | REST Endpoint | Parity |
 |---------|----------|---------------|--------|
 | Store memory (structured) | `memstate_set` | `POST /memories/remember` | ✅ Equivalent |
-| Store memory (AI-extracted) | `memstate_remember` | `POST /ingest` | ✅ Equivalent |
+| Store memory (AI-extracted) | `memstate_remember` | `POST /memories/remember` | ✅ Equivalent |
 | Get memory by ID | `memstate_get(memory_id=...)` | `GET /memories/{id}` | ✅ Equivalent |
 | Get project tree | `memstate_get(project_id=...)` | `GET /tree` + `POST /keypaths` | ✅ Equivalent |
 | Get subtree | `memstate_get(keypath=...)` | `POST /keypaths (recursive)` | ✅ Equivalent |
@@ -213,7 +213,7 @@ Agents currently rely on the AI ingestion engine to detect conflicts and superse
 This is the highest-priority fix. A 500 on a second delete breaks retry logic and makes the REST and MCP delete behaviours inconsistent.
 
 **4. Add synchronous ingestion option to REST (Medium Priority)**  
-`POST /ingest` is async and requires polling `GET /jobs/{job_id}`. The MCP `memstate_remember` is effectively synchronous (it waits for AI extraction). Consider adding `POST /ingest?sync=true` that blocks until extraction completes, returning the same response structure as `memstate_remember`. This would make the REST API more ergonomic for simple integrations.
+`POST /memories/remember` is async and requires polling `GET /jobs/{job_id}`. The MCP `memstate_remember` is effectively synchronous (it waits for AI extraction). Consider adding `POST /memories/remember?sync=true` that blocks until extraction completes, returning the same response structure as `memstate_remember`. This would make the REST API more ergonomic for simple integrations.
 
 **5. Document the `is_deleted` asymmetry — BUG-002 (Low Priority)**  
 Either filter soft-deleted projects from `GET /projects/{id}` or add `include_deleted=true` to `GET /projects`.

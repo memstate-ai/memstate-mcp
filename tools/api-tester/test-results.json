@@ -153,7 +153,7 @@
     "response": "{\"memories\":{\"test.rest.memory\":\"This is a test memory from the REST API. It validates that the /memories/remember endpoint works...\",\"test.seed\":\"seed memory to register project in memories table\"},\"total_count\":2,\"revision_number\":1}\n"
   },
   {
-    "name": "POST /ingest",
+    "name": "POST /memories/remember",
     "type": "REST",
     "category": "Ingestion",
     "status": "PASS",
