@@ -85,7 +85,7 @@ function clineRulesContent(projectId: string): string {
 ## Key principles
 - Always check memory before starting — never re-explain what's already stored
 - Prefer memstate_remember for summaries, memstate_set only for single key=value facts
-- Use short project IDs (e.g. "${projectId}" not "my-full-application-name")
+- Use short project IDs (e.g. "${projectId}" not "my_full_application_name")
 `;
 }
 
@@ -109,8 +109,8 @@ export async function main(): Promise<void> {
   console.log("╚══════════════════════════════════════════════╝\n");
   console.log(`Project directory: ${cwd}\n`);
 
-  const projectId = await promptUser(rl, "Project ID (short name, e.g. 'myapp'): ");
-  const trimmedId = projectId.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-") || "myproject";
+  const projectId = await promptUser(rl, "Project ID (short name, e.g. 'my_app'): ");
+  const trimmedId = projectId.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_") || "my_project";
 
   const filesToCreate: FileToCreate[] = [
     {

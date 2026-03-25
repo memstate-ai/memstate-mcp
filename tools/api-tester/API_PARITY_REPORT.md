@@ -139,21 +139,21 @@ Notably, `GET /projects/{id}` **does** return the soft-deleted project with `"is
 curl -X POST https://api.memstate.ai/api/v1/memories/remember \
   -H "Authorization: Bearer <key>" \
   -H "Content-Type: application/json" \
-  -d '{"project_id":"test-proj","keypath":"a.b","content":"test"}'
+  -d '{"project_id":"test_proj","keypath":"a.b","content":"test"}'
 
 # 2. First delete (succeeds — HTTP 200)
 curl -X POST https://api.memstate.ai/api/v1/projects/delete \
   -H "Authorization: Bearer <key>" \
   -H "Content-Type: application/json" \
-  -d '{"project_id":"test-proj"}'
-# → {"project_id":"test-proj","deleted_count":1,"message":"Soft-deleted project..."}
+  -d '{"project_id":"test_proj"}'
+# → {"project_id":"test_proj","deleted_count":1,"message":"Soft-deleted project..."}
 
 # 3. Second delete (BUG — HTTP 500)
 curl -X POST https://api.memstate.ai/api/v1/projects/delete \
   -H "Authorization: Bearer <key>" \
   -H "Content-Type: application/json" \
-  -d '{"project_id":"test-proj"}'
-# → {"error":"project 'test-proj' not found"}
+  -d '{"project_id":"test_proj"}'
+# → {"error":"project 'test_proj' not found"}
 ```
 
 **Expected Behavior:** HTTP 200 with `deleted_count: 0` (idempotent) or HTTP 404.  

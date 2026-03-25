@@ -1,6 +1,6 @@
 # Memstate MCP - Memory Storage
 
-This project uses Memstate MCP for versioned memory. Keypaths are hierarchical (e.g. `project.myapp.database`). Memstate handles versioning and conflict detection.
+This project uses Memstate MCP for versioned memory. Keypaths are hierarchical (e.g. `project.my_app.database`). Memstate handles versioning and conflict detection.
 
 ## Which tool when
 
@@ -13,12 +13,12 @@ This project uses Memstate MCP for versioned memory. Keypaths are hierarchical (
 - **memstate_history** — View version history of a keypath or memory.
 
 ## Before each task
-Check what already exists: `memstate_get(project_id="myproject")` or `memstate_search(query="topic", project_id="myproject")`
+Check what already exists: `memstate_get(project_id="my_project")` or `memstate_search(query="topic", project_id="my_project")`
 
 ## After each task
 **Preferred — save markdown with remember:**
-memstate_remember(project_id="myproject", content="## Task Summary\n- What was done\n- Key changes\n- Files modified", source="agent")
+memstate_remember(project_id="my_project", content="## Task Summary\n- What was done\n- Key changes\n- Files modified", source="agent")
 
-**Only for a single value:** `memstate_set(project_id="myproject", keypath="config.port", value="8080")`
+**Only for a single value:** `memstate_set(project_id="my_project", keypath="config.port", value="8080")`
 
-Keypaths are auto-prefixed: `keypath="database"` → `project.myproject.database`. Use short project_id: `myapp`, `memstate`, etc.
+Keypaths are auto-prefixed: `keypath="database"` → `project.my_project.database`. Use short project_id: `my_app`, `memstate`, etc.

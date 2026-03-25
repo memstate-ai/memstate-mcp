@@ -158,29 +158,29 @@ All support the same stdio MCP config format. Add to your client's MCP settings 
 Memories are organized in hierarchical dot-notation:
 
 ```
-project.myapp.database.schema
-project.myapp.auth.provider
-project.myapp.deploy.environment
+project.my_app.database.schema
+project.my_app.auth.provider
+project.my_app.deploy.environment
 ```
 
-Keypaths are auto-prefixed: `keypath="database"` with `project_id="myapp"` → `project.myapp.database`. Your agent can drill into exactly what it needs — no full-context dumps.
+Keypaths are auto-prefixed: `keypath="database"` with `project_id="my_app"` → `project.my_app.database`. Your agent can drill into exactly what it needs — no full-context dumps.
 
 ---
 
 ## How It Works
 
 ```
-Agent: memstate_remember(project_id="myapp", content="## Auth\nUsing SuperTokens...")
+Agent: memstate_remember(project_id="my_app", content="## Auth\nUsing SuperTokens...")
          ↓
-Server extracts keypaths:  [project.myapp.auth.provider, ...]
+Server extracts keypaths:  [project.my_app.auth.provider, ...]
          ↓
 Conflict detection:  compare against existing memories at those keypaths
          ↓
 New version stored — old version preserved in history chain
          ↓
-Next session: memstate_get(project_id="myapp") → structured summaries only
+Next session: memstate_get(project_id="my_app") → structured summaries only
          ↓
-Agent drills into project.myapp.auth only when it needs auth details
+Agent drills into project.my_app.auth only when it needs auth details
 ```
 
 **Token cost stays constant** regardless of how many total memories exist.
@@ -195,11 +195,11 @@ Copy into your `AGENTS.md` or system prompt:
 ## Memory (Memstate MCP)
 
 ### Before each task
-- memstate_get(project_id="myproject") — browse existing knowledge
-- memstate_search(query="topic", project_id="myproject") — find by meaning
+- memstate_get(project_id="my_project") — browse existing knowledge
+- memstate_search(query="topic", project_id="my_project") — find by meaning
 
 ### After each task
-- memstate_remember(project_id="myproject", content="## Summary\n- ...", source="agent")
+- memstate_remember(project_id="my_project", content="## Summary\n- ...", source="agent")
 
 ### Tool guide
 - memstate_remember — markdown summaries, decisions, task results (preferred)

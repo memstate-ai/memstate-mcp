@@ -26,7 +26,7 @@ search, and full version history.
 
 | Concept | Description |
 |---|---|
-| **Project** | Top-level container for memories (e.g., `myapp`, `backend-api`). Auto-created on first write. |
+| **Project** | Top-level container for memories (e.g., `my_app`, `backend_api`). Auto-created on first write. |
 | **Keypath** | Dot-separated hierarchical path (e.g., `auth.method`). Auto-prefixed with `project.{project_id}.` |
 | **Memory** | A single fact or markdown summary stored at a keypath with full version history. |
 | **Versioning** | Writing to an existing keypath supersedes the old value. History is always preserved. |
@@ -60,16 +60,16 @@ Always check what already exists before making decisions or modifying code.
 ```bash
 # 1. Semantic search — find relevant facts by meaning
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_search.py \
-  --project "myapp" \
+  --project "my_app" \
   --query "how is authentication configured"
 
 # 2. Browse the full project tree (all domains and keypaths)
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_get.py \
-  --project "myapp"
+  --project "my_app"
 
 # 3. Get a specific subtree with full content
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_get.py \
-  --project "myapp" --keypath "database" --include-content
+  --project "my_app" --keypath "database" --include-content
 ```
 
 ### After Completing a Task (Remember)
@@ -77,14 +77,14 @@ python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_get.py \
 ```bash
 # Store a single fact (config, status, version numbers)
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_set.py \
-  --project "myapp" \
+  --project "my_app" \
   --keypath "config.port" \
   --value "8080" \
   --category "fact"
 
 # Store a rich markdown summary (AI extracts keypaths automatically)
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_remember.py \
-  --project "myapp" \
+  --project "my_app" \
   --content "## Auth Migration\n- Changed from JWT to server-side sessions\n- Added MFA via TOTP\n- Files: auth.go, middleware.go" \
   --source "agent"
 ```
@@ -94,15 +94,15 @@ python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_remember.py \
 ```bash
 # View how a fact changed over time
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_history.py \
-  --project "myapp" --keypath "database.engine"
+  --project "my_app" --keypath "database.engine"
 
 # Soft-delete an outdated keypath (history preserved)
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_delete.py \
-  --project "myapp" --keypath "config.old_setting"
+  --project "my_app" --keypath "config.old_setting"
 
 # Soft-delete an entire project
 python3 /home/ubuntu/skills/memstate-ai/scripts/memstate_delete_project.py \
-  --project "myapp"
+  --project "my_app"
 ```
 
 ## Script Reference
