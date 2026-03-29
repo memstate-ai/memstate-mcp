@@ -2,8 +2,8 @@
 /**
  * memstate init — Project-level agent instruction file generator
  *
- * Creates AGENTS.md, CLAUDE.md, GEMINI.md, .clinerules, and other
- * agent instruction files for the current project directory.
+ * Fetches the canonical instructions from https://memstate.ai/files/use-memstate-memory.md
+ * and creates agent-specific rule files for the current project directory.
  *
  * Usage: npx @memstate/mcp init
  */
@@ -12,85 +12,63 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 
-function agentsMdContent(projectId: string): string {
-  return `# Memstate MCP - Memory Storage
+const INSTRUCTIONS_URL = "https://memstate.ai/files/use-memstate-memory.md";
 
-This project uses [Memstate MCP](https://memstate.ai) for versioned, structured memory.
-Keypaths are hierarchical dot-separated paths (e.g. \`project.${projectId}.database\`).
+const FALLBACK_INSTRUCTIONS = `# Memstate MCP - Memory Storage
 
-## Which tool when
+This project uses Memstate MCP for persistent, versioned memory across sessions.
 
-- **memstate_remember** — PREFERRED for markdown, task summaries, meeting notes, decisions.
-  The server automatically extracts keypaths and creates structured memories. Use after tasks.
-- **memstate_set** — Only for a single keypath = single short value (e.g. \`config.port = "8080"\`).
-  Not for summaries or multi-fact content.
-- **memstate_get** — Browse the project memory tree, fetch existing knowledge before starting tasks.
-- **memstate_search** — Find memories by meaning/semantic search when you don't know the keypath.
-- **memstate_history** — View version history of a keypath or memory entry.
+## REQUIRED: Start and end every task with memory
 
-## Before each task
-
-Always check what already exists to avoid duplicate work and understand prior decisions:
-
+**BEFORE starting any task**, load existing context so you don't redo past work or revert intentional decisions:
 \`\`\`
-memstate_get(project_id="${projectId}")
+memstate_get(project_id="<your_project>")
 \`\`\`
 
-Or search by topic:
-
+**AFTER completing any task**, save what you did so the next session has context:
 \`\`\`
-memstate_search(query="authentication", project_id="${projectId}")
-\`\`\`
-
-## After each task
-
-**Preferred — save a markdown summary:**
-
-\`\`\`
-memstate_remember(
-  project_id="${projectId}",
-  content="## Task Summary\\n- What was done\\n- Key decisions made\\n- Files modified\\n- Next steps",
-  source="agent"
-)
+memstate_remember(project_id="<your_project>", content="## Task Summary\\n- What was done\\n- Key decisions made\\n- Files modified", source="agent")
 \`\`\`
 
-**Only for a single value:**
+These two calls are mandatory. Skipping them means the next session starts blind.
 
-\`\`\`
-memstate_set(project_id="${projectId}", keypath="config.port", value="8080")
-\`\`\`
+## Tool reference
 
-## Keypath conventions
+| Tool | When to use |
+|------|-------------|
+| memstate_get | **Start of every task.** Browse project tree or fetch content at a keypath. |
+| memstate_remember | **End of every task.** Save markdown summaries, notes, decisions. |
+| memstate_search | Find memories by meaning when you don't know the exact keypath. |
+| memstate_set | Store a single key=value fact (e.g. config.port). Not for summaries. |
+| memstate_history | View version history of a keypath. |
+| memstate_delete | Soft-delete a keypath (history preserved). |
 
-Keypaths are auto-prefixed with \`project.${projectId}.\`. Use short, descriptive project IDs.
+## Project naming
+Use a short snake_case name matching your repo or topic (e.g. my_app, api_service). All related memories should share the same project_id.`;
 
-Example keypaths:
-- \`database.type\` → "PostgreSQL"
-- \`auth.provider\` → "SuperTokens"
-- \`api.port\` → "8080"
-- \`deploy.platform\` → "Coolify"
-`;
+async function fetchInstructions(): Promise<string> {
+  try {
+    const res = await fetch(INSTRUCTIONS_URL);
+    if (res.ok) {
+      const text = await res.text();
+      if (text.includes("memstate_get")) return text;
+    }
+  } catch {
+    // fall through to fallback
+  }
+  console.log("  (Using bundled instructions — could not reach memstate.ai)");
+  return FALLBACK_INSTRUCTIONS;
 }
 
-function clineRulesContent(projectId: string): string {
-  return `# Memstate Memory Rules
-
-## Before each task
-- Run memstate_get(project_id="${projectId}") to load existing context
-- Search for relevant memories: memstate_search(query="<topic>", project_id="${projectId}")
-
-## After each task
-- Save a summary: memstate_remember(project_id="${projectId}", content="## Summary\\n...", source="agent")
-
-## Key principles
-- Always check memory before starting — never re-explain what's already stored
-- Prefer memstate_remember for summaries, memstate_set only for single key=value facts
-- Use short project IDs (e.g. "${projectId}" not "my_full_application_name")
-`;
+function replaceProjectId(content: string, projectId: string): string {
+  return content
+    .replace(/<your_project>/g, projectId)
+    .replace(/my_project/g, projectId);
 }
 
 interface FileToCreate {
   filename: string;
+  dir?: string;
   content: string;
   description: string;
 }
@@ -112,33 +90,45 @@ export async function main(): Promise<void> {
   const projectId = await promptUser(rl, "Project ID (short name, e.g. 'my_app'): ");
   const trimmedId = projectId.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_") || "my_project";
 
+  console.log("\nFetching latest instructions...");
+  const instructions = await fetchInstructions();
+  const content = replaceProjectId(instructions, trimmedId);
+
   const filesToCreate: FileToCreate[] = [
     {
-      filename: "AGENTS.md",
-      content: agentsMdContent(trimmedId),
-      description: "Universal agent instructions (OpenAI Codex, Gemini CLI, etc.)",
-    },
-    {
       filename: "CLAUDE.md",
-      content: agentsMdContent(trimmedId),
-      description: "Claude-specific instructions",
+      content,
+      description: "Claude Code / Claude Desktop",
     },
     {
-      filename: "GEMINI.md",
-      content: agentsMdContent(trimmedId),
-      description: "Gemini CLI instructions",
+      filename: "AGENTS.md",
+      content,
+      description: "OpenAI Codex, Gemini CLI, and other agents",
+    },
+    {
+      filename: "use-memstate-memory.mdc",
+      dir: ".cursor/rules",
+      content: `---\nalwaysApply: true\n---\n\n${content}`,
+      description: "Cursor rules (always active)",
     },
     {
       filename: ".clinerules",
-      content: clineRulesContent(trimmedId),
-      description: "Cline (VS Code) rules",
+      content,
+      description: "Cline (VS Code)",
+    },
+    {
+      filename: "rules.md",
+      dir: ".windsurf",
+      content,
+      description: "Windsurf",
     },
   ];
 
   console.log("\nFiles to create:");
   filesToCreate.forEach((f, i) => {
-    const exists = fs.existsSync(path.join(cwd, f.filename));
-    console.log(`  ${i + 1}. ${f.filename} ${exists ? "(will overwrite)" : "(new)"} — ${f.description}`);
+    const fullPath = f.dir ? path.join(f.dir, f.filename) : f.filename;
+    const exists = fs.existsSync(path.join(cwd, fullPath));
+    console.log(`  ${i + 1}. ${fullPath} ${exists ? "(will append)" : "(new)"} — ${f.description}`);
   });
 
   const confirm = await promptUser(rl, "\nCreate these files? (y/n): ");
@@ -150,17 +140,34 @@ export async function main(): Promise<void> {
 
   console.log("\nCreating files...");
   for (const file of filesToCreate) {
-    const filePath = path.join(cwd, file.filename);
-    fs.writeFileSync(filePath, file.content, "utf-8");
-    console.log(`  ✅ Created ${file.filename}`);
+    const dir = file.dir ? path.join(cwd, file.dir) : cwd;
+    const filePath = path.join(dir, file.filename);
+    const displayPath = file.dir ? path.join(file.dir, file.filename) : file.filename;
+
+    if (file.dir && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    if (fs.existsSync(filePath)) {
+      const existing = fs.readFileSync(filePath, "utf-8");
+      if (existing.includes("memstate_get") || existing.includes("Memstate")) {
+        console.log(`  ⏭️  Skipped ${displayPath} (already has Memstate instructions)`);
+        continue;
+      }
+      fs.appendFileSync(filePath, "\n\n" + file.content, "utf-8");
+      console.log(`  ✅ Appended to ${displayPath}`);
+    } else {
+      fs.writeFileSync(filePath, file.content, "utf-8");
+      console.log(`  ✅ Created ${displayPath}`);
+    }
   }
 
   console.log("\n═══════════════════════════════════════════════");
   console.log("✅ Project initialized!\n");
   console.log("Your AI agents will now:");
-  console.log(`  • Check memory before tasks (project: "${trimmedId}")`);
+  console.log(`  • Load memory before tasks (project: "${trimmedId}")`);
   console.log("  • Save summaries after tasks automatically");
-  console.log("  • Never re-explain your architecture\n");
+  console.log("  • Never lose context between sessions\n");
   console.log("Commit these files to share Memstate setup with your team.\n");
 
   rl.close();
