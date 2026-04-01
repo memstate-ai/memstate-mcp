@@ -47,6 +47,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const readline = __importStar(require("readline"));
+const child_process_1 = require("child_process");
 const MEMSTATE_API_KEYS_URL = "https://memstate.ai/dashboard/api-keys?utm_source=cli&utm_medium=setup";
 const MEMSTATE_DOCS_URL = "https://memstate.ai/docs/setup";
 const MCP_CONFIG_TEMPLATE = (apiKey) => ({
@@ -62,11 +63,53 @@ function expandHome(p) {
     }
     return p;
 }
+/** Check whether the `claude` CLI is available on PATH */
+function claudeCliAvailable() {
+    try {
+        (0, child_process_1.execSync)("claude --version", { stdio: "ignore" });
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Install Memstate into Claude Code via the official `claude mcp add` CLI.
+ * Uses --scope user so it applies across all projects.
+ * Returns { success, message }.
+ */
+function installViaClaudeCli(apiKey) {
+    try {
+        // Remove any existing memstate entry first (ignore errors if not present)
+        try {
+            (0, child_process_1.execSync)("claude mcp remove memstate --scope user", { stdio: "ignore" });
+        }
+        catch {
+            // Not present — that's fine
+        }
+        const cmd = `claude mcp add --scope user --env MEMSTATE_API_KEY=${apiKey} -- memstate npx -y @memstate/mcp`;
+        (0, child_process_1.execSync)(cmd, { stdio: "pipe" });
+        return { success: true, message: "✅ Configured via claude CLI (user scope)" };
+    }
+    catch (err) {
+        return {
+            success: false,
+            message: `❌ claude CLI failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
+    }
+}
 function getAgentConfigs() {
     const home = os.homedir();
     const isWindows = process.platform === "win32";
     const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
     return [
+        {
+            name: "Claude Code",
+            configPaths: [path.join(home, ".claude.json")],
+            configKey: "mcpServers",
+            isJsonFile: true,
+            useCli: true, // Prefer `claude mcp add` — the official supported method
+        },
         {
             name: "Claude Desktop",
             configPaths: isWindows
@@ -75,12 +118,6 @@ function getAgentConfigs() {
                     path.join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
                     path.join(home, ".config", "Claude", "claude_desktop_config.json"),
                 ],
-            configKey: "mcpServers",
-            isJsonFile: true,
-        },
-        {
-            name: "Claude Code",
-            configPaths: [path.join(home, ".claude.json")],
             configKey: "mcpServers",
             isJsonFile: true,
         },
@@ -130,6 +167,16 @@ function writeJsonConfig(filePath, config) {
     fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
 function configureAgent(agent, apiKey) {
+    // Claude Code: prefer the official CLI
+    if (agent.useCli) {
+        const hasCli = claudeCliAvailable();
+        if (hasCli) {
+            const result = installViaClaudeCli(apiKey);
+            return { ...result, path: "~/.claude.json (via claude CLI)" };
+        }
+        // CLI not found — fall back to direct JSON edit with a warning
+        console.log("  ⚠️  claude CLI not found — falling back to direct JSON edit");
+    }
     const configPath = agent.configPaths.find((p) => fs.existsSync(expandHome(p))) || agent.configPaths[0];
     const expandedPath = expandHome(configPath);
     try {
@@ -196,7 +243,8 @@ async function main() {
     }
     console.log(`Found ${detectedAgents.length} agent(s):\n`);
     detectedAgents.forEach((agent, i) => {
-        console.log(`  ${i + 1}. ${agent.name}`);
+        const method = agent.useCli && claudeCliAvailable() ? " (via claude CLI)" : "";
+        console.log(`  ${i + 1}. ${agent.name}${method}`);
     });
     const selection = await promptUser(rl, "\nConfigure all detected agents? (y/n, or enter numbers like '1,3'): ");
     let agentsToSetup = [];

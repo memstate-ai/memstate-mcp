@@ -1,6 +1,6 @@
 {
   "name": "@memstate/mcp",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Versioned memory for AI agents — structured keypaths, conflict detection, and 80% fewer tokens than alternatives.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
