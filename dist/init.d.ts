@@ -2,8 +2,8 @@
 /**
  * memstate init — Project-level agent instruction file generator
  *
- * Creates AGENTS.md, CLAUDE.md, GEMINI.md, .clinerules, and other
- * agent instruction files for the current project directory.
+ * Fetches the canonical instructions from https://memstate.ai/files/use-memstate-memory.md
+ * and creates agent-specific rule files for the current project directory.
  *
  * Usage: npx @memstate/mcp init
  */

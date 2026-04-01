@@ -80,7 +80,7 @@ function getAgentConfigs() {
         },
         {
             name: "Claude Code",
-            configPaths: [path.join(home, ".claude", "claude_desktop_config.json")],
+            configPaths: [path.join(home, ".claude.json")],
             configKey: "mcpServers",
             isJsonFile: true,
         },
@@ -225,10 +225,12 @@ async function main() {
         results.push({ agent: agent.name, ...result });
     }
     // Step 4: Suggest init
-    console.log("\nStep 4: Add agent instructions (optional but recommended)");
-    console.log("──────────────────────────────────────────────────────────");
-    console.log("Run this in your project directory to create AGENTS.md:");
+    console.log("\nStep 4: Add agent rules to your project (recommended)");
+    console.log("─────────────────────────────────────────────────────");
+    console.log("Run this in your project directory to create rule files");
+    console.log("(CLAUDE.md, AGENTS.md, .cursor/rules/, .clinerules, etc.):");
     console.log("\n  npx @memstate/mcp init\n");
+    console.log("These rules tell agents to use memory before/after every task.\n");
     // Summary
     const succeeded = results.filter((r) => r.success);
     const failed = results.filter((r) => !r.success);
